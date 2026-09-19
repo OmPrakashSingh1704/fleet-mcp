@@ -16,6 +16,26 @@ def _manager(tmp_path, docker_client, probation_seconds=1800.0, repo_root="."):
     return manager, registry, known_good
 
 
+def _docker_client(known_containers: dict | None = None) -> MagicMock:
+    """A MagicMock docker client whose containers.get() mimics real Docker:
+    docker.errors.NotFound for any name that wasn't explicitly registered.
+
+    This matters once DeployManager starts probing containers.get() as a
+    guard (e.g. the retired-sha check) -- a bare MagicMock() would silently
+    "find" any container name and trip guards that expect NotFound.
+    """
+    client = MagicMock()
+    containers = dict(known_containers or {})
+
+    def fake_get(name):
+        if name in containers:
+            return containers[name]
+        raise docker.errors.NotFound(f"no such container: {name}")
+
+    client.containers.get.side_effect = fake_get
+    return client
+
+
 # ---------------------------------------------------------------------------
 # deploy(): promotion path
 # ---------------------------------------------------------------------------
@@ -25,7 +45,7 @@ def _manager(tmp_path, docker_client, probation_seconds=1800.0, repo_root="."):
 @patch("services.deploy_watcher.deploy_manager.wait_for_healthy", return_value=True)
 @patch("services.deploy_watcher.deploy_manager.build_image", return_value="sha256:new")
 def test_deploy_promotes_new_container_on_healthy_check(mock_build, mock_wait, mock_thread, tmp_path):
-    docker_client = MagicMock()
+    docker_client = _docker_client()
     manager, registry, known_good = _manager(tmp_path, docker_client)
 
     result = manager.deploy("fixture-hello-mcp", "services/fixture_hello_mcp", "abc123")
@@ -53,7 +73,7 @@ def test_deploy_promotes_new_container_on_healthy_check(mock_build, mock_wait, m
 def test_deploy_builds_image_with_repo_root_context_and_service_dockerfile(
     mock_build, mock_wait, mock_thread, tmp_path
 ):
-    docker_client = MagicMock()
+    docker_client = _docker_client()
     manager, _registry, _known_good = _manager(tmp_path, docker_client, repo_root="/repo/root")
 
     manager.deploy("fixture-hello-mcp", "services/fixture_hello_mcp", "abc123")
@@ -70,7 +90,7 @@ def test_deploy_builds_image_with_repo_root_context_and_service_dockerfile(
 @patch("services.deploy_watcher.deploy_manager.wait_for_healthy", return_value=False)
 @patch("services.deploy_watcher.deploy_manager.build_image", return_value="sha256:new")
 def test_deploy_kills_new_container_and_keeps_old_on_failed_health_check(mock_build, mock_wait, mock_thread, tmp_path):
-    docker_client = MagicMock()
+    docker_client = _docker_client()
     new_container = MagicMock()
     docker_client.containers.run.return_value = new_container
     manager, registry, known_good = _manager(tmp_path, docker_client)
@@ -92,15 +112,17 @@ def test_deploy_kills_new_container_and_keeps_old_on_failed_health_check(mock_bu
 @patch("services.deploy_watcher.deploy_manager.wait_for_healthy", return_value=True)
 @patch("services.deploy_watcher.deploy_manager.build_image", return_value="sha256:new")
 def test_deploy_stops_old_container_after_promotion(mock_build, mock_wait, mock_thread, tmp_path):
-    docker_client = MagicMock()
     old_container = MagicMock()
-    docker_client.containers.get.return_value = old_container
+    docker_client = _docker_client({"fixture-hello-mcp-old": old_container})
     manager, registry, known_good = _manager(tmp_path, docker_client)
     registry.set_active_container("fixture-hello-mcp", "fixture-hello-mcp-old")
 
     manager.deploy("fixture-hello-mcp", "services/fixture_hello_mcp", "abc123")
 
-    docker_client.containers.get.assert_called_once_with("fixture-hello-mcp-old")
+    # First call is the retired-sha guard checking the new container name
+    # (NotFound -- proceed); second is the old-container lookup to stop it.
+    calls = [c.args for c in docker_client.containers.get.call_args_list]
+    assert calls == [("fixture-hello-mcp-abc123",), ("fixture-hello-mcp-old",)]
     old_container.stop.assert_called_once()
     old_container.remove.assert_not_called()
 
@@ -132,7 +154,7 @@ def test_deploy_is_idempotent_when_commit_already_active(mock_build, mock_wait, 
 @patch("services.deploy_watcher.deploy_manager.build_image")
 def test_deploy_returns_failure_when_build_image_raises_build_error(mock_build, tmp_path):
     mock_build.side_effect = docker.errors.BuildError("boom", iter([]))
-    docker_client = MagicMock()
+    docker_client = _docker_client()
     manager, registry, known_good = _manager(tmp_path, docker_client)
 
     result = manager.deploy("fixture-hello-mcp", "services/fixture_hello_mcp", "abc123")
@@ -147,7 +169,7 @@ def test_deploy_returns_failure_when_build_image_raises_build_error(mock_build, 
 
 @patch("services.deploy_watcher.deploy_manager.build_image", return_value="sha256:new")
 def test_deploy_returns_failure_when_containers_run_raises_api_error(mock_build, tmp_path):
-    docker_client = MagicMock()
+    docker_client = _docker_client()
     docker_client.containers.run.side_effect = docker.errors.APIError("container name conflict")
     manager, registry, known_good = _manager(tmp_path, docker_client)
 
@@ -163,7 +185,7 @@ def test_deploy_returns_failure_when_containers_run_raises_api_error(mock_build,
 @patch("services.deploy_watcher.deploy_manager.build_image")
 def test_deploy_returns_failure_when_build_image_raises_image_not_found(mock_build, tmp_path):
     mock_build.side_effect = docker.errors.ImageNotFound("base image missing")
-    docker_client = MagicMock()
+    docker_client = _docker_client()
     manager, _registry, _known_good = _manager(tmp_path, docker_client)
 
     result = manager.deploy("fixture-hello-mcp", "services/fixture_hello_mcp", "abc123")
@@ -353,7 +375,7 @@ def test_probation_treats_container_not_found_as_failed_check(mock_monotonic, mo
 @patch("services.deploy_watcher.deploy_manager.wait_for_healthy", return_value=True)
 @patch("services.deploy_watcher.deploy_manager.build_image", return_value="sha256:new")
 def test_deploy_merges_run_options_without_overriding_reserved_kwargs(mock_build, mock_wait, mock_thread, tmp_path):
-    docker_client = MagicMock()
+    docker_client = _docker_client()
     registry = ServiceRegistry(str(tmp_path / "registry.json"))
     known_good = KnownGoodStore(str(tmp_path / "known_good.json"))
     manager = DeployManager(
@@ -406,7 +428,7 @@ def test_rollback_merges_run_options_without_overriding_reserved_kwargs(tmp_path
 @patch("services.deploy_watcher.deploy_manager.wait_for_healthy", return_value=True)
 @patch("services.deploy_watcher.deploy_manager.build_image", return_value="sha256:new")
 def test_deploy_uses_custom_health_url_resolver_for_initial_check(mock_build, mock_wait, mock_thread, tmp_path):
-    docker_client = MagicMock()
+    docker_client = _docker_client()
     new_container = MagicMock()
     docker_client.containers.run.return_value = new_container
     resolver = MagicMock(return_value="http://custom-host:9999/healthz")
@@ -444,3 +466,242 @@ def test_probation_uses_custom_health_url_resolver(mock_monotonic, mock_wait, mo
         "http://custom-host:9999/healthz", required_successes=1, interval_seconds=2.0, timeout_seconds=5.0
     )
     assert known_good.get("fixture-hello-mcp") == "fixture-hello-mcp:abc123"
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1 -- Important #1: rollback() error handling
+# ---------------------------------------------------------------------------
+
+
+def test_rollback_restarts_previous_container_when_run_raises_api_error(tmp_path):
+    previous_container = MagicMock()
+    docker_client = _docker_client({"fixture-hello-mcp-abc123": previous_container})
+    docker_client.containers.run.side_effect = docker.errors.APIError("no room on daemon")
+    manager, registry, known_good = _manager(tmp_path, docker_client)
+    known_good.record("fixture-hello-mcp", "fixture-hello-mcp:good-sha")
+    registry.set_active_container("fixture-hello-mcp", "fixture-hello-mcp-abc123")
+
+    result = manager.rollback("fixture-hello-mcp")
+
+    assert result.success is False
+    assert result.image_tag == "fixture-hello-mcp:good-sha"
+    assert "rollback run failed" in result.reason
+    # The (failing) active container was stopped, then restarted as a
+    # best-effort recovery once starting the known-good image failed.
+    previous_container.stop.assert_called_once()
+    previous_container.start.assert_called_once()
+    # The registry is left pointing at whatever was active before -- never
+    # flipped to a container that doesn't exist.
+    assert registry.get_active_container("fixture-hello-mcp") == "fixture-hello-mcp-abc123"
+
+
+def test_rollback_never_raises_when_restart_attempt_also_fails(tmp_path):
+    previous_container = MagicMock()
+    previous_container.start.side_effect = docker.errors.APIError("daemon unreachable")
+    docker_client = _docker_client({"fixture-hello-mcp-abc123": previous_container})
+    docker_client.containers.run.side_effect = docker.errors.APIError("no room on daemon")
+    manager, registry, known_good = _manager(tmp_path, docker_client)
+    known_good.record("fixture-hello-mcp", "fixture-hello-mcp:good-sha")
+    registry.set_active_container("fixture-hello-mcp", "fixture-hello-mcp-abc123")
+
+    result = manager.rollback("fixture-hello-mcp")  # must not raise
+
+    assert result.success is False
+    assert "rollback run failed" in result.reason
+
+
+def test_rollback_container_names_are_unique_within_same_second(tmp_path):
+    docker_client = _docker_client()
+    manager, registry, known_good = _manager(tmp_path, docker_client)
+    known_good.record("fixture-hello-mcp", "fixture-hello-mcp:good-sha")
+
+    manager.rollback("fixture-hello-mcp")
+    first_name = docker_client.containers.run.call_args.kwargs["name"]
+
+    manager.rollback("fixture-hello-mcp")
+    second_name = docker_client.containers.run.call_args.kwargs["name"]
+
+    assert first_name != second_name
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1 -- Important #2: deploy() must not raise after the registry
+# flip, and the probation thread must always start once it has flipped.
+# ---------------------------------------------------------------------------
+
+
+@patch("services.deploy_watcher.deploy_manager.threading.Thread")
+@patch("services.deploy_watcher.deploy_manager.wait_for_healthy", return_value=True)
+@patch("services.deploy_watcher.deploy_manager.build_image", return_value="sha256:new")
+def test_deploy_succeeds_and_starts_probation_even_if_stopping_old_container_raises(
+    mock_build, mock_wait, mock_thread, tmp_path
+):
+    old_container = MagicMock()
+    old_container.stop.side_effect = docker.errors.APIError("boom")
+    docker_client = _docker_client({"fixture-hello-mcp-old": old_container})
+    manager, registry, known_good = _manager(tmp_path, docker_client)
+    registry.set_active_container("fixture-hello-mcp", "fixture-hello-mcp-old")
+
+    result = manager.deploy("fixture-hello-mcp", "services/fixture_hello_mcp", "abc123")  # must not raise
+
+    assert result.success is True
+    assert registry.get_active_container("fixture-hello-mcp") == "fixture-hello-mcp-abc123"
+    mock_thread.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1 -- Important #3: leftover container from a failed run() is
+# force-removed so a future deploy of the same sha doesn't collide.
+# ---------------------------------------------------------------------------
+
+
+def test_deploy_force_removes_leftover_container_when_run_raises_api_error(tmp_path):
+    leftover_container = MagicMock()
+    docker_client = MagicMock()
+    call_count = {"n": 0}
+
+    def fake_get(name):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            # First call: the retired-sha guard, before the container
+            # existed.
+            raise docker.errors.NotFound("not found")
+        # Second call: cleanup after containers.run() created-but-failed
+        # to start the container.
+        return leftover_container
+
+    docker_client.containers.get.side_effect = fake_get
+    docker_client.containers.run.side_effect = docker.errors.APIError("failed to start")
+
+    with patch("services.deploy_watcher.deploy_manager.build_image", return_value="sha256:new"):
+        manager, registry, known_good = _manager(tmp_path, docker_client)
+        result = manager.deploy("fixture-hello-mcp", "services/fixture_hello_mcp", "abc123")
+
+    assert result.success is False
+    assert "run failed" in result.reason
+    leftover_container.remove.assert_called_once_with(force=True)
+    assert call_count["n"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1 -- Minor #5: retired-sha guard
+# ---------------------------------------------------------------------------
+
+
+@patch("services.deploy_watcher.deploy_manager.build_image")
+def test_deploy_refuses_to_redeploy_a_retired_sha(mock_build, tmp_path):
+    existing_but_inactive = MagicMock()
+    docker_client = _docker_client({"fixture-hello-mcp-abc123": existing_but_inactive})
+    manager, registry, known_good = _manager(tmp_path, docker_client)
+    # Registry does NOT point at fixture-hello-mcp-abc123 -- it was
+    # previously promoted then retired (or rolled back away from).
+
+    result = manager.deploy("fixture-hello-mcp", "services/fixture_hello_mcp", "abc123")
+
+    assert result.success is False
+    assert result.reason == "sha previously retired; not redeploying"
+    mock_build.assert_not_called()
+    docker_client.containers.run.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1 -- Minor #4: _rollback(service, expected_active) staleness
+# guard, used internally by the probation monitor.
+# ---------------------------------------------------------------------------
+
+
+def test_internal_rollback_with_mismatched_expected_active_does_nothing(tmp_path):
+    docker_client = _docker_client()
+    manager, registry, known_good = _manager(tmp_path, docker_client)
+    known_good.record("fixture-hello-mcp", "fixture-hello-mcp:good-sha")
+    registry.set_active_container("fixture-hello-mcp", "fixture-hello-mcp-newer")
+
+    result = manager._rollback("fixture-hello-mcp", "fixture-hello-mcp-abc123")
+
+    assert result.success is False
+    assert result.reason == "superseded"
+    docker_client.containers.get.assert_not_called()
+    docker_client.containers.run.assert_not_called()
+    assert registry.get_active_container("fixture-hello-mcp") == "fixture-hello-mcp-newer"
+
+
+@patch("services.deploy_watcher.deploy_manager.time.sleep", return_value=None)
+@patch("services.deploy_watcher.deploy_manager.wait_for_healthy", return_value=False)
+@patch("services.deploy_watcher.deploy_manager.time.monotonic")
+def test_probation_no_rollback_when_registry_changes_before_recheck(mock_monotonic, mock_wait, mock_sleep, tmp_path):
+    docker_client = _docker_client({"fixture-hello-mcp-abc123": MagicMock()})
+    manager, registry, known_good = _manager(tmp_path, docker_client, probation_seconds=1800.0)
+    known_good.record("fixture-hello-mcp", "fixture-hello-mcp:previous-good")
+    registry.set_active_container("fixture-hello-mcp", "fixture-hello-mcp-abc123")
+
+    # First read (top-of-loop staleness check) still matches; the second
+    # read (inside _rollback, right before acting) reflects a newer deploy
+    # having already promoted a different container in the meantime.
+    registry.get_active_container = MagicMock(
+        side_effect=["fixture-hello-mcp-abc123", "fixture-hello-mcp-newer"]
+    )
+
+    mock_monotonic.side_effect = [0, 5]
+
+    manager._run_probation("fixture-hello-mcp", "fixture-hello-mcp-abc123", 8080, "fixture-hello-mcp:abc123")
+
+    docker_client.containers.run.assert_not_called()
+    assert known_good.get("fixture-hello-mcp") == "fixture-hello-mcp:previous-good"
+
+
+@patch("services.deploy_watcher.deploy_manager.time.sleep", return_value=None)
+@patch("services.deploy_watcher.deploy_manager.wait_for_healthy", return_value=False)
+@patch("services.deploy_watcher.deploy_manager.time.monotonic")
+def test_probation_failure_on_first_ever_deploy_does_not_stop_active_container(
+    mock_monotonic, mock_wait, mock_sleep, tmp_path
+):
+    watched_container = MagicMock()
+    docker_client = _docker_client({"fixture-hello-mcp-abc123": watched_container})
+    manager, registry, known_good = _manager(tmp_path, docker_client, probation_seconds=1800.0)
+    registry.set_active_container("fixture-hello-mcp", "fixture-hello-mcp-abc123")
+    # No known-good recorded yet -- this is the very first deploy of this
+    # service, so there is nothing better to roll back to.
+
+    mock_monotonic.side_effect = [0, 5]
+
+    manager._run_probation("fixture-hello-mcp", "fixture-hello-mcp-abc123", 8080, "fixture-hello-mcp:abc123")
+
+    watched_container.stop.assert_not_called()
+    docker_client.containers.run.assert_not_called()
+    assert known_good.get("fixture-hello-mcp") is None
+    assert registry.get_active_container("fixture-hello-mcp") == "fixture-hello-mcp-abc123"
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1 -- Minor #6: the probation loop body must never silently die.
+# ---------------------------------------------------------------------------
+
+
+@patch("services.deploy_watcher.deploy_manager.time.sleep", return_value=None)
+@patch("services.deploy_watcher.deploy_manager.wait_for_healthy")
+@patch("services.deploy_watcher.deploy_manager.time.monotonic")
+def test_probation_resolver_exception_is_treated_as_failed_check_and_rolls_back(
+    mock_monotonic, mock_wait, mock_sleep, tmp_path
+):
+    watched_container = MagicMock()
+    docker_client = _docker_client({"fixture-hello-mcp-abc123": watched_container})
+    resolver = MagicMock(side_effect=ValueError("boom"))
+    registry = ServiceRegistry(str(tmp_path / "registry.json"))
+    known_good = KnownGoodStore(str(tmp_path / "known_good.json"))
+    known_good.record("fixture-hello-mcp", "fixture-hello-mcp:previous-good")
+    manager = DeployManager(
+        docker_client, registry, known_good, probation_seconds=1800.0, health_url_resolver=resolver
+    )
+    registry.set_active_container("fixture-hello-mcp", "fixture-hello-mcp-abc123")
+
+    mock_monotonic.side_effect = [0, 5]
+
+    manager._run_probation("fixture-hello-mcp", "fixture-hello-mcp-abc123", 8080, "fixture-hello-mcp:abc123")
+
+    resolver.assert_called_once()
+    mock_wait.assert_not_called()  # never reached -- resolver raised first
+    docker_client.containers.run.assert_called_once()
+    args, _kwargs = docker_client.containers.run.call_args
+    assert args[0] == "fixture-hello-mcp:previous-good"
+    assert registry.get_active_container("fixture-hello-mcp") != "fixture-hello-mcp-abc123"
+    assert known_good.get("fixture-hello-mcp") == "fixture-hello-mcp:previous-good"
