@@ -46,6 +46,8 @@ def test_write_file_refuses_hardcoded_protected_path_even_with_permissive_manife
     with pytest.raises(tools.ProtectedPathError):
         tools.write_file(str(workspace), "fleet_manifest.yaml", "services: {}", manifest, "issue-1", tracker)
 
+    assert not (workspace / "fleet_manifest.yaml").exists()
+
 
 def test_write_file_succeeds_for_unprotected_path(tmp_path):
     manifest = _manifest_with_protected_deploy_watcher(tmp_path)
@@ -89,3 +91,79 @@ def test_run_local_tests_reports_failure_without_raising(tmp_path):
 
     assert result.returncode != 0
     assert "test_fail" in result.stdout
+
+
+def test_write_file_refuses_absolute_path(tmp_path):
+    """Test that absolute paths are rejected."""
+    manifest_path = tmp_path / "fleet_manifest.yaml"
+    manifest_path.write_text("services: {}")
+    manifest = FleetManifest.load(str(manifest_path))
+    tracker = AttemptTracker(max_attempts=5)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    outside_path = str(tmp_path / "outside" / "x.txt")
+
+    with pytest.raises(tools.ProtectedPathError):
+        tools.write_file(workspace, outside_path, "malicious", manifest, "issue-1", tracker)
+
+    assert not (tmp_path / "outside" / "x.txt").exists()
+
+
+def test_write_file_refuses_leading_slash_path(tmp_path):
+    """Test that paths starting with / are rejected."""
+    manifest_path = tmp_path / "fleet_manifest.yaml"
+    manifest_path.write_text("services: {}")
+    manifest = FleetManifest.load(str(manifest_path))
+    tracker = AttemptTracker(max_attempts=5)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    with pytest.raises(tools.ProtectedPathError):
+        tools.write_file(workspace, "/x.txt", "malicious", manifest, "issue-1", tracker)
+
+
+def test_write_file_refuses_dotdot_escape(tmp_path):
+    """Test that .. escapes are rejected."""
+    manifest_path = tmp_path / "fleet_manifest.yaml"
+    manifest_path.write_text("services: {}")
+    manifest = FleetManifest.load(str(manifest_path))
+    tracker = AttemptTracker(max_attempts=5)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    with pytest.raises(tools.ProtectedPathError):
+        tools.write_file(workspace, "../outside.txt", "malicious", manifest, "issue-1", tracker)
+
+    assert not (tmp_path / "outside.txt").exists()
+
+
+def test_read_file_refuses_absolute_path(tmp_path):
+    """Test that read_file rejects absolute paths."""
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    outside_file = tmp_path / "outside.txt"
+    outside_file.write_text("secret")
+
+    with pytest.raises(tools.ProtectedPathError):
+        tools.read_file(str(workspace), str(outside_file))
+
+
+def test_refused_path_does_not_consume_attempt(tmp_path):
+    """Test that refused paths (protected or escaping) don't consume attempts."""
+    manifest_path = tmp_path / "fleet_manifest.yaml"
+    manifest_path.write_text("services: {}")
+    manifest = FleetManifest.load(str(manifest_path))
+    tracker = AttemptTracker(max_attempts=1)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    # First write: try to escape but fail (attempt not consumed)
+    with pytest.raises(tools.ProtectedPathError):
+        tools.write_file(workspace, "../outside.txt", "malicious", manifest, "issue-1", tracker)
+
+    # Second write: should succeed because the failed attempt wasn't consumed
+    tools.write_file(workspace, "legit.txt", "content", manifest, "issue-1", tracker)
+
+    assert (workspace / "legit.txt").read_text() == "content"
