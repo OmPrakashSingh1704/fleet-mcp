@@ -29,7 +29,7 @@ reviewable regardless of who technically could have pushed directly.
   core, changes to the safety model described in
   [SECURITY.md](SECURITY.md) and [ARCHITECTURE.md](ARCHITECTURE.md)) should
   start as a written spec or an issue for discussion before implementation,
-  following the pattern already used in `docs/superpowers/specs/`. Lazy
+  following the pattern already used in `docs/design/`. Lazy
   consensus applies: if no maintainer objects within a reasonable review
   window, the change proceeds. A maintainer with a substantive objection
   can block until it's resolved through discussion.

@@ -23,7 +23,7 @@ body:
     id: proposal
     attributes:
       label: Proposed solution
-      description: As concrete as you can make it. Link to a design spec under docs/superpowers/specs/ if you've written one.
+      description: As concrete as you can make it. Link to a design spec under docs/design/ if you've written one.
     validations:
       required: true
   - type: dropdown

@@ -4,9 +4,9 @@ This document describes Fleet MCP's components, their trust boundaries, the
 end-to-end self-dev cycle, and the data files the system relies on. It
 reflects the code in `services/` and `tests/` as of the `0.1.0` foundation,
 plus the specs it was built from:
-[self-dev-mcp design](docs/superpowers/specs/2026-09-19-self-dev-mcp-design.md)
+[self-dev-mcp design](docs/design/2026-09-19-self-dev-mcp-design.md)
 and
-[model adapters + credentials manager design](docs/superpowers/specs/2026-09-19-model-adapters-and-credentials-manager-design.md).
+[model adapters + credentials manager design](docs/design/2026-09-19-model-adapters-and-credentials-manager-design.md).
 Anything marked **(planned)** below has no implementation in this repo yet.
 
 ## Components and trust boundaries
@@ -345,7 +345,7 @@ fleet or high write frequency).
 it's the next planned extension of this same pipeline, and because it
 changes the protected-core picture slightly. See the [model adapters +
 credentials manager design
-spec](docs/superpowers/specs/2026-09-19-model-adapters-and-credentials-manager-design.md)
+spec](docs/design/2026-09-19-model-adapters-and-credentials-manager-design.md)
 for the full design.
 
 - **`model-adapters-mcp`** (planned, not protected) — a fleet service

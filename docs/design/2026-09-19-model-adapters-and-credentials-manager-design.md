@@ -1,7 +1,10 @@
+> **Planned design; not implemented.** Nothing in this document exists in
+> the codebase yet. See [ARCHITECTURE.md](../../ARCHITECTURE.md) for what is built.
+
 # Model Adapters + Credentials Manager — Design Spec
 
 Date: 2026-09-19
-Status: approved design, pending implementation plan
+Status: **Planned design; not implemented.**
 
 ## Purpose
 
@@ -9,7 +12,7 @@ Let the chat/orchestrating agent switch which LLM backend serves the
 conversation on request (e.g. "switch to JEV"), and — when the requested
 model isn't supported yet — detect the gap, ask the user whether to add it,
 and (on confirmation) use the Self-Dev MCP foundation
-(`docs/superpowers/specs/2026-09-19-self-dev-mcp-design.md`) to generate,
+(`docs/design/2026-09-19-self-dev-mcp-design.md`) to generate,
 test, and deploy a new adapter, without ever committing a raw credential to
 git or Docker.
 

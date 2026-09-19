@@ -297,8 +297,8 @@ services/
   fixture_hello_mcp/          fixture Flask service + Dockerfile, used as the
                                 Deploy Watcher's local smoke-test target
 tests/                      unit tests, mirroring the services/ layout
-docs/superpowers/specs/     design specs for this system and its extensions
-docs/superpowers/plans/     implementation plans
+docs/design/                design documents (historical / planned; code and
+                              ARCHITECTURE.md are authoritative)
 fleet_manifest.yaml         the fleet manifest (protected)
 docker-compose.yml          local fleet: mcp-fleet network + all three services (protected)
 .env.example                template for the .env docker-compose reads secrets from

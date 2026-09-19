@@ -1,3 +1,5 @@
+> **Historical design document.** This is the original design; the shipped behavior differs (e.g. a monorepo manifest instead of per-repo remotes, 7 tools, and the hardening in SECURITY.md). The code, [ARCHITECTURE.md](../../ARCHITECTURE.md) and [SECURITY.md](../../SECURITY.md) are authoritative.
+
 # Self-Dev MCP — Design Spec
 
 Date: 2026-09-19
