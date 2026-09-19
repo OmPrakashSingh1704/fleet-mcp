@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from github import Github
+from github import Auth, Github
 
 
 class GitHubClient:
     def __init__(self, token: str, repo_full_name: str):
-        self._gh = Github(token)
+        self._gh = Github(auth=Auth.Token(token))
         self._repo = self._gh.get_repo(repo_full_name)
 
     def list_issues_by_label(self, label: str) -> list:
