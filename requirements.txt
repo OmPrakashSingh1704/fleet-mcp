@@ -1,0 +1,8 @@
+PyYAML==6.0.2
+PyGithub==2.4.0
+docker==7.1.0
+requests==2.32.3
+flask==3.0.3
+mcp==1.2.0
+pytest==8.3.3
+pytest-mock==3.14.0

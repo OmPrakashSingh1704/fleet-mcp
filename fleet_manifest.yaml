@@ -1,0 +1,20 @@
+services:
+  fixture-hello-mcp:
+    path: services/fixture_hello_mcp
+    protected: false
+    container: fixture-hello-mcp
+    health_check: http://fixture-hello-mcp:8080/health
+  self-dev-mcp:
+    path: services/self_dev_mcp
+    protected: false
+    container: self-dev-mcp
+    health_check: http://self-dev-mcp:8080/health
+  deploy-watcher:
+    path: services/deploy_watcher
+    protected: true
+  permission-manager:
+    path: services/permission_manager
+    protected: true
+  mcp-gateway:
+    path: services/mcp_gateway
+    protected: true
