@@ -100,8 +100,6 @@ the agent has no tool capable of editing.
   orchestrating agent and every capability server, including Self-Dev MCP)
 - `model-adapters-mcp` and `credentials-manager`, and the chat-side "Model
   Manager" flow for adding support for a new LLM backend on request
-- CI workflow and CODEOWNERS enforcing the human-review requirement at the
-  platform level
 
 ## How it fits together
 
@@ -159,8 +157,10 @@ what an agent's reasoning concludes it should do:
   gateway** (planned) services — marked `protected: true` in the manifest.
   These hold real authority (Docker socket access, routing, auth), so they
   are off-limits at the tool layer *and* would additionally require
-  CODEOWNERS sign-off at the GitHub layer once branch protection is
-  configured.
+  CODEOWNERS sign-off at the GitHub layer — the workflow and CODEOWNERS file
+  exist; enforcement requires branch protection, which the repo admin
+  enables — see
+  [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection).
 
 On top of that:
 
@@ -170,7 +170,10 @@ On top of that:
   touches disk.
 - **No auto-merge, anywhere** — Self-Dev MCP can open and update a pull
   request; nothing in this codebase can merge one. Merging is a human
-  action, backed by GitHub branch protection and CODEOWNERS once configured.
+  action, backed by GitHub branch protection and CODEOWNERS — the workflow
+  and CODEOWNERS file exist; enforcement requires branch protection, which
+  the repo admin enables — see
+  [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection).
 - **No deploy authority in Self-Dev MCP** — it holds no Docker socket, no
   deploy credentials, and never imports `docker`. Only the Deploy Watcher —
   a separate, protected service — can build an image or swap a container.
@@ -188,7 +191,7 @@ two paths are hardcoded rather than manifest-driven.
 ### Run the test suite (works today)
 
 ```bash
-git clone https://github.com/OWNER/fleet-mcp.git
+git clone https://github.com/OmPrakashSingh1704/fleet-mcp.git
 cd fleet-mcp
 python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt
@@ -255,7 +258,7 @@ docker-compose.yml          local fleet: mcp-fleet network + all three services
 | Deploy Watcher (blue/green, probation, rollback, known-good floor) | Built |
 | Docker Compose + per-service Dockerfiles | Built |
 | Self-Dev MCP HTTP transport (`--transport http`) | Built |
-| CI workflow + CODEOWNERS | Planned |
+| CI workflow + CODEOWNERS | Built (the CODEOWNERS owner is a placeholder — `@OWNER` — and branch protection must still be enabled by the repo admin; see [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection)) |
 | MCP gateway | Planned |
 | Permission manager | Planned |
 | `model-adapters-mcp` | Planned |

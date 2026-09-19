@@ -226,10 +226,16 @@ protection:
    `posixpath.normpath`, case-folds, and treats anything that still starts
    with `..` (escapes the repo root) as protected.
 3. **Platform level, via GitHub** (configured, not code) — branch
-   protection requiring the CI status check and human review, plus a
+   protection requiring the `test` CI status check and human review, plus a
    CODEOWNERS entry naming a human owner for protected-core paths. This is
    the layer that still holds even if layers 1 and 2 had a bug — it's
-   external to this codebase entirely, which is the point.
+   external to this codebase entirely, which is the point. The workflow
+   (`.github/workflows/test.yml`) and CODEOWNERS file (`.github/CODEOWNERS`)
+   exist in this repository; the CODEOWNERS owner is still the `@OWNER`
+   placeholder, and branch protection is not enabled automatically — a repo
+   admin has to replace the placeholder and run the command in
+   [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection)
+   before this layer is actually active.
 
 A fourth, structural layer isn't a "check" at all: the Self-Dev MCP process
 holds no Docker socket and no deploy credentials, so even a complete bypass

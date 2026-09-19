@@ -10,7 +10,7 @@ opened (short version: nothing — the bar is the same).
 Requirements: Python 3.11+.
 
 ```bash
-git clone https://github.com/OWNER/fleet-mcp.git
+git clone https://github.com/OmPrakashSingh1704/fleet-mcp.git
 cd fleet-mcp
 python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt
@@ -33,8 +33,13 @@ warning, fix it before opening a PR rather than suppressing the flag.
   This keeps history scannable and lines up with `CHANGELOG.md`.
 - Open a PR against `main`. CI must pass (the same `pytest tests` run
   above). At least one human review is required before merge — this is
-  enforced by GitHub branch protection once configured for the repo, not
-  just by convention.
+  meant to be enforced by GitHub branch protection, not just convention. The
+  CI workflow (`.github/workflows/test.yml`) and the CODEOWNERS file
+  (`.github/CODEOWNERS`) exist in this repository, but branch protection is
+  not enabled automatically — see
+  [Enabling branch protection](#enabling-branch-protection) below for the
+  exact command the repo admin runs to turn required checks and required
+  review into an actual merge gate.
 - We do not squash-merge away meaningful history by default, but a PR with a
   cleaner commit sequence than "wip / wip / fix / wip" is easier to review;
   feel free to interactively clean up your own branch before requesting
@@ -71,14 +76,62 @@ The fleet manifest (`fleet_manifest.yaml`), the manifest loader
 (`services/common/manifest.py`), and any service marked `protected: true` in
 the manifest (currently `deploy-watcher`; `permission-manager` and
 `mcp-gateway` once they exist) are the protected core described in
-[ARCHITECTURE.md](ARCHITECTURE.md) and [SECURITY.md](SECURITY.md). Once
-CODEOWNERS is configured for this repo, changes under those paths require
-sign-off from a designated owner, in addition to normal review. This is by
-design: it's the human-side half of the same guarantee that the Self-Dev
-MCP's `write_file` tool refuses to touch those paths at all. If your PR
-touches protected-core paths, say so explicitly in the PR description (the
+[ARCHITECTURE.md](ARCHITECTURE.md) and [SECURITY.md](SECURITY.md).
+`.github/CODEOWNERS` already lists these paths (plus `/.github/` and
+`SECURITY.md`), but its owner is still the `@OWNER` placeholder — GitHub
+flags those entries as invalid until someone replaces `@OWNER` with a real
+GitHub user or team, and code-owner review can't be enforced until both that
+replacement and branch protection (see below) are done. Once both are in
+place, changes under those paths require sign-off from the designated owner,
+in addition to normal review. This is by design: it's the human-side half of
+the same guarantee that the Self-Dev MCP's `write_file` tool refuses to
+touch those paths at all. If your PR touches protected-core paths, say so
+explicitly in the PR description (the
 [PR template](.github/PULL_REQUEST_TEMPLATE.md) asks) so reviewers know to
 apply the extra scrutiny.
+
+## Enabling branch protection
+
+The CI workflow (`.github/workflows/test.yml`, job id `test`) and
+`.github/CODEOWNERS` exist in this repository, but neither is enforced until
+a repo admin turns on branch protection for `main` — GitHub does not do this
+automatically just because the files exist. Before enabling it, replace the
+`@OWNER` placeholder in `.github/CODEOWNERS` with a real GitHub user or
+team; otherwise GitHub treats every CODEOWNERS entry as invalid and
+"require code-owner reviews" can never be satisfied, permanently blocking
+every PR that touches a protected-core path.
+
+Once `@OWNER` is replaced, a repo admin with `gh` authenticated against
+`OmPrakashSingh1704/fleet-mcp` runs:
+
+```bash
+gh api repos/OmPrakashSingh1704/fleet-mcp/branches/main/protection \
+  --method PUT \
+  --input - <<'EOF'
+{
+  "required_status_checks": {
+    "strict": true,
+    "contexts": ["test"]
+  },
+  "enforce_admins": true,
+  "required_pull_request_reviews": {
+    "required_approving_review_count": 1,
+    "require_code_owner_reviews": true,
+    "dismiss_stale_reviews": true
+  },
+  "restrictions": null,
+  "allow_force_pushes": false,
+  "allow_deletions": false
+}
+EOF
+```
+
+Use `--input -` with the JSON on stdin, as shown — `--field` with nested
+JSON objects (e.g. `required_status_checks`) does not produce the same
+request and silently misconfigures the protection rule. This is a
+GitHub-side setting, not a file in this repository, so it can't be verified
+by the test suite; confirm it by checking **Settings → Branches** on the
+repo, or by re-running the same `gh api` call with `--method GET`.
 
 ## Reviewing self-dev PRs
 

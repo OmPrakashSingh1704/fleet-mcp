@@ -1,0 +1,42 @@
+name: test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - run: python -m pytest tests -m "not docker" -W error::DeprecationWarning -v
+
+  # Not a required status check (branch protection only requires "test").
+  # GitHub-hosted ubuntu-latest runners ship a Docker daemon and network
+  # egress, so the tests/integration/ suite -- which builds real images,
+  # starts real containers, and pip-installs flask inside the fixture
+  # image -- can run here, it just doesn't block merges.
+  docker-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - run: python -m pytest tests -m docker -v -W error::DeprecationWarning

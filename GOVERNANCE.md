@@ -7,10 +7,14 @@ constrains people.
 
 ## Maintainers
 
-Maintainers are the individuals listed as code owners once `CODEOWNERS` is
-added to this repository (tracked separately from this documentation set —
-see the [README roadmap](README.md#status--roadmap)). Until then, the
-maintainers are the people with write access to this repository, and any
+Maintainers are the individuals listed as code owners in
+[`.github/CODEOWNERS`](.github/CODEOWNERS), which now exists in this
+repository. Its owner is still the `@OWNER` placeholder, though, so until
+someone replaces it with a real GitHub user or team (and a repo admin
+enables branch protection — see
+[CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection)),
+code-owner review cannot actually be enforced. Until both of those are done,
+the maintainers are the people with write access to this repository, and any
 substantial change to project direction should go through a pull request
 and issue discussion rather than a direct push, so it's visible and
 reviewable regardless of who technically could have pushed directly.
@@ -49,7 +53,11 @@ enforcement (Self-Dev MCP's `write_file` refusing those paths) and the
 process-level enforcement (a human, via CODEOWNERS and branch protection,
 approving any change that does reach those paths through a different route)
 are meant to hold independently of each other. Neither is allowed to become
-the only thing standing between an agent and the protected core.
+the only thing standing between an agent and the protected core. The
+CODEOWNERS file and CI workflow that back the process-level enforcement now
+exist; the repo admin still has to replace the `@OWNER` placeholder and
+enable branch protection before that enforcement is actually active — see
+[CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection).
 
 ## Adding or removing a maintainer
 

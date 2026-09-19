@@ -16,12 +16,14 @@ trusting Fleet MCP with real issues.
 1. **Create a `self-dev`-labeled issue** in your GitHub repo describing a
    small, safe change (e.g. a fix in `services/fixture_hello_mcp`).
 2. **Drive Self-Dev MCP to a PR**: call `list_assigned_issues`,
-   `start_issue`, `write_file`, `run_local_tests`, and `submit_pr` against
+   `start_issue`, `write_file`, `run_tests`, and `submit_pr` against
    that issue and confirm a real pull request appears on
    `selfdev/issue-N`.
-3. **Verify CI and the required review block the merge**: confirm the PR
-   cannot be merged until CI passes and a human review is submitted (branch
-   protection configured per [CONTRIBUTING.md](../CONTRIBUTING.md)).
+3. **Verify CI and the required review block the merge** (requires branch
+   protection enabled per
+   [CONTRIBUTING.md#enabling-branch-protection](../CONTRIBUTING.md#enabling-branch-protection)
+   and `@OWNER` replaced in `.github/CODEOWNERS`): confirm the PR cannot be
+   merged until CI passes and a human review is submitted.
 4. **Merge** the PR once CI is green and it's approved.
 5. **Observe the watcher deploy**: confirm the Deploy Watcher picks up the
    new commit on `main`, builds the image, and promotes it — check the

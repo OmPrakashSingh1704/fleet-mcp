@@ -118,9 +118,11 @@ to wait indefinitely.
   `open_pr` is idempotent (re-submitting returns the existing open PR
   instead of opening a duplicate) and never force-pushes. Merging to `main`
   requires a human, enforced by GitHub branch protection and CODEOWNERS —
-  configure both before trusting this in a real repo (see the checklist
-  below; this is a platform control this codebase cannot enforce on its
-  own).
+  the workflow (`.github/workflows/test.yml`) and CODEOWNERS file
+  (`.github/CODEOWNERS`) exist; enforcement requires branch protection,
+  which the repo admin enables — see
+  [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection)
+  (this is a platform control this codebase cannot enforce on its own).
 - **No deploy authority in Self-Dev MCP.** The Self-Dev MCP process holds no
   Docker socket access and no deploy credentials, and does not import
   `docker`. Only the Deploy Watcher can build an image, start a container,
@@ -145,9 +147,12 @@ to wait indefinitely.
 
 - The GitHub token issued to the Self-Dev MCP is scoped to only the repos
   it's meant to operate on, and branch protection + CODEOWNERS are actually
-  configured on any repo you don't want auto-merged into. This codebase
-  enforces the tool-level and workspace-level controls above; it cannot
-  enforce GitHub-side branch protection for you.
+  configured on any repo you don't want auto-merged into. The workflow and
+  CODEOWNERS file exist in this repository; enforcement requires branch
+  protection, which the repo admin enables — see
+  [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection).
+  This codebase enforces the tool-level and workspace-level controls above;
+  it cannot enforce GitHub-side branch protection for you.
 - The Docker daemon the Deploy Watcher talks to is not shared with anything
   the Self-Dev MCP (or an attacker who compromises it) can reach. If
   Self-Dev MCP's container can reach the Deploy Watcher's Docker socket by
@@ -213,11 +218,17 @@ your own risk assessment, not as an invitation to assume they're fixed:
 
 Before pointing Fleet MCP at a repository you care about:
 
-- [ ] Enable GitHub branch protection on `main` requiring the CI status
-      check and at least one human review.
-- [ ] Add a `CODEOWNERS` entry for the protected-core paths (the deploy
-      watcher, permission manager, gateway directories, and
-      `fleet_manifest.yaml`) naming a real human owner.
+- [ ] Enable GitHub branch protection on `main` requiring the `test` status
+      check and at least one human review — the workflow and CODEOWNERS
+      file already exist in this repository; branch protection is not
+      enabled automatically. See
+      [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection)
+      for the exact command.
+- [ ] Replace the `@OWNER` placeholder in `.github/CODEOWNERS` (it already
+      covers the protected-core paths — the deploy watcher, permission
+      manager, gateway directories, `fleet_manifest.yaml`, `/.github/`, and
+      `SECURITY.md`) with a real human owner; code-owner review cannot be
+      enforced until you do.
 - [ ] Scope the Self-Dev MCP's GitHub token to only the repos/orgs it needs;
       do not issue an org-wide admin token.
 - [ ] Run the Self-Dev MCP container with no Docker socket mount and no

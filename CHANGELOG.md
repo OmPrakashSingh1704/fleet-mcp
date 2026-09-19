@@ -44,6 +44,25 @@ minor versions).
   (previously this made Self-Dev MCP's HTTP server fail to bind before
   `/health` could ever respond); it now surfaces as an `"ERROR: ..."` string
   from the first tool call that needs GitHub.
+- `.github/CODEOWNERS`, covering the protected core
+  (`fleet_manifest.yaml`, `services/common/manifest.py`,
+  `services/deploy_watcher/`, the planned `services/permission_manager/`
+  and `services/mcp_gateway/` directories, `/.github/`, and `SECURITY.md`)
+  with a placeholder `@OWNER` — GitHub will flag these entries as invalid,
+  and code-owner review cannot be enforced, until `@OWNER` is replaced.
+- `.github/workflows/test.yml`: the CI workflow (job id `test`, so the
+  required-check context is `test`), running on `pull_request` and `push`
+  to `main` with least-privilege `contents: read` permissions and a
+  concurrency group that cancels a superseded run on the same ref. A
+  second, non-required `docker-integration` job runs the Docker-marked
+  integration suite on GitHub's Docker-capable `ubuntu-latest` runners.
+- Branch-protection documentation: a
+  [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection)
+  section with the exact `gh api` command a repo admin runs to require the
+  `test` status check and code-owner review on `main`, plus updates across
+  README, SECURITY.md, CONTRIBUTING.md, GOVERNANCE.md, and ARCHITECTURE.md
+  clarifying that the workflow and CODEOWNERS file now exist but
+  enforcement still requires the admin to enable branch protection.
 
 ## [0.1.0] - 2026-09-19
 
@@ -115,5 +134,5 @@ manager, model-adapters-mcp, credentials-manager, and the Model Manager
 chat flow are not built yet; Docker Compose/Dockerfiles and CI/CODEOWNERS
 are in progress.
 
-[Unreleased]: https://github.com/OWNER/fleet-mcp/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/OWNER/fleet-mcp/releases/tag/v0.1.0
+[Unreleased]: https://github.com/OmPrakashSingh1704/fleet-mcp/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/OmPrakashSingh1704/fleet-mcp/releases/tag/v0.1.0
