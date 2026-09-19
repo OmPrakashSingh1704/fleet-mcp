@@ -7,19 +7,36 @@ from services.self_dev_mcp.github_client import GitHubClient
 @patch("services.self_dev_mcp.github_client.Github")
 def test_list_issues_by_label_delegates_to_repo(mock_github_cls):
     mock_repo = MagicMock()
-    mock_repo.get_issues.return_value = ["issue-1", "issue-2"]
+    issue1 = MagicMock(pull_request=None)
+    issue2 = MagicMock(pull_request=None)
+    mock_repo.get_issues.return_value = [issue1, issue2]
     mock_github_cls.return_value.get_repo.return_value = mock_repo
 
     client = GitHubClient("token", "org/repo")
     issues = client.list_issues_by_label("self-dev")
 
-    assert issues == ["issue-1", "issue-2"]
+    assert issues == [issue1, issue2]
     mock_repo.get_issues.assert_called_once_with(state="open", labels=["self-dev"])
+
+
+@patch("services.self_dev_mcp.github_client.Github")
+def test_list_issues_by_label_filters_out_pull_requests(mock_github_cls):
+    mock_repo = MagicMock()
+    real_issue = MagicMock(pull_request=None)
+    pr_disguised_as_issue = MagicMock(pull_request=MagicMock())
+    mock_repo.get_issues.return_value = [real_issue, pr_disguised_as_issue]
+    mock_github_cls.return_value.get_repo.return_value = mock_repo
+
+    client = GitHubClient("token", "org/repo")
+    issues = client.list_issues_by_label("self-dev")
+
+    assert issues == [real_issue]
 
 
 @patch("services.self_dev_mcp.github_client.Github")
 def test_open_pr_delegates_to_repo(mock_github_cls):
     mock_repo = MagicMock()
+    mock_repo.get_pulls.return_value = []
     mock_pr = MagicMock()
     mock_repo.create_pull.return_value = mock_pr
     mock_github_cls.return_value.get_repo.return_value = mock_repo
@@ -34,13 +51,32 @@ def test_open_pr_delegates_to_repo(mock_github_cls):
 
 
 @patch("services.self_dev_mcp.github_client.Github")
-def test_get_pr_status_reads_combined_status(mock_github_cls):
+def test_open_pr_returns_existing_pr_without_creating_duplicate(mock_github_cls):
+    mock_repo = MagicMock()
+    mock_repo.owner.login = "org"
+    existing_pr = MagicMock()
+    mock_repo.get_pulls.return_value = [existing_pr]
+    mock_github_cls.return_value.get_repo.return_value = mock_repo
+
+    client = GitHubClient("token", "org/repo")
+    result = client.open_pr("selfdev/issue-1", "main", "Fix bug", "body text")
+
+    assert result is existing_pr
+    mock_repo.get_pulls.assert_called_once_with(state="open", head="org:selfdev/issue-1", base="main")
+    mock_repo.create_pull.assert_not_called()
+
+
+@patch("services.self_dev_mcp.github_client.Github")
+def test_get_pr_status_all_check_runs_success(mock_github_cls):
     mock_repo = MagicMock()
     mock_pr = MagicMock()
+    mock_pr.head.sha = "abc123"
     mock_commit = MagicMock()
-    mock_commit.get_combined_status.return_value.state = "success"
-    mock_pr.get_commits.return_value.reversed = [mock_commit]
+    run1 = MagicMock(status="completed", conclusion="success")
+    run2 = MagicMock(status="completed", conclusion="success")
+    mock_commit.get_check_runs.return_value = [run1, run2]
     mock_repo.get_pull.return_value = mock_pr
+    mock_repo.get_commit.return_value = mock_commit
     mock_github_cls.return_value.get_repo.return_value = mock_repo
 
     client = GitHubClient("token", "org/repo")
@@ -48,6 +84,62 @@ def test_get_pr_status_reads_combined_status(mock_github_cls):
 
     assert status == "success"
     mock_repo.get_pull.assert_called_once_with(42)
+    mock_repo.get_commit.assert_called_once_with("abc123")
+
+
+@patch("services.self_dev_mcp.github_client.Github")
+def test_get_pr_status_one_check_run_failure(mock_github_cls):
+    mock_repo = MagicMock()
+    mock_pr = MagicMock()
+    mock_pr.head.sha = "abc123"
+    mock_commit = MagicMock()
+    run1 = MagicMock(status="completed", conclusion="success")
+    run2 = MagicMock(status="completed", conclusion="failure")
+    mock_commit.get_check_runs.return_value = [run1, run2]
+    mock_repo.get_pull.return_value = mock_pr
+    mock_repo.get_commit.return_value = mock_commit
+    mock_github_cls.return_value.get_repo.return_value = mock_repo
+
+    client = GitHubClient("token", "org/repo")
+    status = client.get_pr_status(42)
+
+    assert status == "failure"
+
+
+@patch("services.self_dev_mcp.github_client.Github")
+def test_get_pr_status_one_check_run_in_progress(mock_github_cls):
+    mock_repo = MagicMock()
+    mock_pr = MagicMock()
+    mock_pr.head.sha = "abc123"
+    mock_commit = MagicMock()
+    run1 = MagicMock(status="completed", conclusion="success")
+    run2 = MagicMock(status="in_progress", conclusion=None)
+    mock_commit.get_check_runs.return_value = [run1, run2]
+    mock_repo.get_pull.return_value = mock_pr
+    mock_repo.get_commit.return_value = mock_commit
+    mock_github_cls.return_value.get_repo.return_value = mock_repo
+
+    client = GitHubClient("token", "org/repo")
+    status = client.get_pr_status(42)
+
+    assert status == "pending"
+
+
+@patch("services.self_dev_mcp.github_client.Github")
+def test_get_pr_status_no_check_runs(mock_github_cls):
+    mock_repo = MagicMock()
+    mock_pr = MagicMock()
+    mock_pr.head.sha = "abc123"
+    mock_commit = MagicMock()
+    mock_commit.get_check_runs.return_value = []
+    mock_repo.get_pull.return_value = mock_pr
+    mock_repo.get_commit.return_value = mock_commit
+    mock_github_cls.return_value.get_repo.return_value = mock_repo
+
+    client = GitHubClient("token", "org/repo")
+    status = client.get_pr_status(42)
+
+    assert status == "pending"
 
 
 @patch("services.self_dev_mcp.github_client.Github")

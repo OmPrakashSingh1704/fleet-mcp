@@ -3,9 +3,11 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from github import GithubException
 
 from services.common.manifest import FleetManifest
 from services.self_dev_mcp.attempt_tracker import AttemptTracker
+from services.self_dev_mcp.git_ops import GitOpsError
 from services.self_dev_mcp.server import (
     ServerDependencies,
     handle_check_pr_status,
@@ -39,10 +41,14 @@ def _deps(tmp_path):
     )
 
 
+@patch("services.self_dev_mcp.server.remote_branch_exists")
 @patch("services.self_dev_mcp.server.create_workspace")
 @patch("services.self_dev_mcp.server.create_branch")
-def test_handle_start_issue_creates_workspace_and_branch(mock_create_branch, mock_create_workspace, tmp_path):
+def test_handle_start_issue_creates_workspace_and_branch(
+    mock_create_branch, mock_create_workspace, mock_remote_branch_exists, tmp_path
+):
     mock_create_workspace.return_value = str(tmp_path / "workspace")
+    mock_remote_branch_exists.return_value = False
     deps = _deps(tmp_path)
 
     branch_name = handle_start_issue(1, deps)
@@ -201,12 +207,14 @@ def test_handle_run_tests_runs_for_valid_path(tmp_path):
 # --- Ruling 4: duplicate-attempt guard ---
 
 
+@patch("services.self_dev_mcp.server.remote_branch_exists")
 @patch("services.self_dev_mcp.server.create_workspace")
 @patch("services.self_dev_mcp.server.create_branch")
 def test_handle_start_issue_twice_returns_error_and_does_not_reclone(
-    mock_create_branch, mock_create_workspace, tmp_path
+    mock_create_branch, mock_create_workspace, mock_remote_branch_exists, tmp_path
 ):
     mock_create_workspace.return_value = str(tmp_path / "workspace")
+    mock_remote_branch_exists.return_value = False
     deps = _deps(tmp_path)
 
     first = handle_start_issue(1, deps)
@@ -250,6 +258,162 @@ def test_handle_submit_pr_missing_workspace_returns_error(tmp_path):
     result = handle_submit_pr(1, "title", "body", deps)
 
     assert result == "ERROR: no active workspace for issue 1; call start_issue first"
+
+
+# --- Fix round 1, Part A: error-handling contract (handlers never raise) ---
+
+
+@patch("services.self_dev_mcp.server.commit_all")
+def test_handle_submit_pr_commit_failure_returns_error_and_keeps_workspace(mock_commit_all, tmp_path):
+    mock_commit_all.side_effect = GitOpsError("nothing to commit")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    deps = _deps(tmp_path)
+    deps.workspaces["1"] = str(workspace)
+
+    result = handle_submit_pr(1, "Fix bug", "body", deps)
+
+    assert result == "ERROR: nothing to commit"
+    assert deps.workspaces["1"] == str(workspace)
+    assert workspace.exists()
+
+
+@patch("services.self_dev_mcp.server.push")
+@patch("services.self_dev_mcp.server.commit_all")
+def test_handle_submit_pr_open_pr_failure_returns_error_and_keeps_workspace(mock_commit_all, mock_push, tmp_path):
+    mock_commit_all.return_value = "abc123"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    deps = _deps(tmp_path)
+    deps.workspaces["1"] = str(workspace)
+    deps.github_client.open_pr.side_effect = GithubException(500, "boom", None)
+
+    result = handle_submit_pr(1, "Fix bug", "body", deps)
+
+    assert result.startswith("ERROR")
+    assert deps.workspaces["1"] == str(workspace)
+    assert workspace.exists()
+
+
+@patch("services.self_dev_mcp.server.destroy_workspace")
+@patch("services.self_dev_mcp.server.remote_branch_exists")
+@patch("services.self_dev_mcp.server.create_workspace")
+@patch("services.self_dev_mcp.server.create_branch")
+def test_handle_start_issue_create_branch_failure_destroys_workspace(
+    mock_create_branch, mock_create_workspace, mock_remote_branch_exists, mock_destroy_workspace, tmp_path
+):
+    mock_create_workspace.return_value = str(tmp_path / "workspace")
+    mock_remote_branch_exists.return_value = False
+    mock_create_branch.side_effect = GitOpsError("checkout failed")
+    deps = _deps(tmp_path)
+
+    result = handle_start_issue(1, deps)
+
+    assert result == "ERROR: checkout failed"
+    mock_destroy_workspace.assert_called_once_with(str(tmp_path / "workspace"))
+    assert "1" not in deps.workspaces
+
+
+def test_handle_read_file_missing_file_returns_error(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    deps = _deps(tmp_path)
+    deps.workspaces["1"] = str(workspace)
+
+    result = handle_read_file(1, "nope.py", deps)
+
+    assert result == "ERROR: file not found: nope.py"
+
+
+def test_handle_write_file_exhausted_and_comment_fails_still_reports_exhausted(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    deps = _deps(tmp_path)
+    deps.workspaces["1"] = str(workspace)
+    deps.tracker = AttemptTracker(max_attempts=1)
+    deps.github_client.comment_on_issue.side_effect = GithubException(500, "boom", None)
+    handle_write_file(1, "a.py", "1", deps)
+
+    result = handle_write_file(1, "b.py", "2", deps)
+
+    assert result.startswith("EXHAUSTED")
+    assert "failed to comment on issue" in result
+
+
+def test_handle_list_assigned_issues_github_failure_returns_error(tmp_path):
+    deps = _deps(tmp_path)
+    deps.github_client.list_issues_by_label.side_effect = GithubException(500, "boom", None)
+
+    result = handle_list_assigned_issues(deps)
+
+    assert result.startswith("ERROR")
+
+
+def test_handle_check_pr_status_github_failure_returns_error(tmp_path):
+    deps = _deps(tmp_path)
+    deps.github_client.get_pr_status.side_effect = GithubException(500, "boom", None)
+
+    result = handle_check_pr_status(42, deps)
+
+    assert result.startswith("ERROR")
+
+
+# --- Fix round 1, Part D: follow-up commits to an existing PR branch ---
+
+
+@patch("services.self_dev_mcp.server.checkout_remote_branch")
+@patch("services.self_dev_mcp.server.remote_branch_exists")
+@patch("services.self_dev_mcp.server.create_workspace")
+@patch("services.self_dev_mcp.server.create_branch")
+def test_handle_start_issue_resumes_existing_remote_branch(
+    mock_create_branch, mock_create_workspace, mock_remote_branch_exists, mock_checkout_remote_branch, tmp_path
+):
+    mock_create_workspace.return_value = str(tmp_path / "workspace")
+    mock_remote_branch_exists.return_value = True
+    deps = _deps(tmp_path)
+
+    branch_name = handle_start_issue(1, deps)
+
+    assert branch_name == "selfdev/issue-1"
+    mock_checkout_remote_branch.assert_called_once_with(str(tmp_path / "workspace"), "selfdev/issue-1")
+    mock_create_branch.assert_not_called()
+
+
+@patch("services.self_dev_mcp.server.checkout_remote_branch")
+@patch("services.self_dev_mcp.server.remote_branch_exists")
+@patch("services.self_dev_mcp.server.create_workspace")
+@patch("services.self_dev_mcp.server.create_branch")
+def test_handle_start_issue_creates_new_branch_when_no_remote_branch(
+    mock_create_branch, mock_create_workspace, mock_remote_branch_exists, mock_checkout_remote_branch, tmp_path
+):
+    mock_create_workspace.return_value = str(tmp_path / "workspace")
+    mock_remote_branch_exists.return_value = False
+    deps = _deps(tmp_path)
+
+    branch_name = handle_start_issue(1, deps)
+
+    assert branch_name == "selfdev/issue-1"
+    mock_create_branch.assert_called_once_with(str(tmp_path / "workspace"), "selfdev/issue-1")
+    mock_checkout_remote_branch.assert_not_called()
+
+
+@patch("services.self_dev_mcp.server.destroy_workspace")
+@patch("services.self_dev_mcp.server.checkout_remote_branch")
+@patch("services.self_dev_mcp.server.remote_branch_exists")
+@patch("services.self_dev_mcp.server.create_workspace")
+def test_handle_start_issue_checkout_remote_branch_failure_destroys_workspace(
+    mock_create_workspace, mock_remote_branch_exists, mock_checkout_remote_branch, mock_destroy_workspace, tmp_path
+):
+    mock_create_workspace.return_value = str(tmp_path / "workspace")
+    mock_remote_branch_exists.return_value = True
+    mock_checkout_remote_branch.side_effect = GitOpsError("checkout --track failed")
+    deps = _deps(tmp_path)
+
+    result = handle_start_issue(1, deps)
+
+    assert result == "ERROR: checkout --track failed"
+    mock_destroy_workspace.assert_called_once_with(str(tmp_path / "workspace"))
+    assert "1" not in deps.workspaces
 
 
 # --- Smoke test: build_mcp_app registers exactly the expected tools ---

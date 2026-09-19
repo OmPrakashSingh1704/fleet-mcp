@@ -36,3 +36,12 @@ def push(repo_dir: str, branch_name: str) -> None:
 
 def current_commit_sha(repo_dir: str) -> str:
     return _run_git(["rev-parse", "HEAD"], cwd=repo_dir)
+
+
+def remote_branch_exists(repo_dir: str, branch_name: str) -> bool:
+    output = _run_git(["ls-remote", "--heads", "origin", branch_name], cwd=repo_dir)
+    return bool(output.strip())
+
+
+def checkout_remote_branch(repo_dir: str, branch_name: str) -> None:
+    _run_git(["checkout", "-b", branch_name, "--track", f"origin/{branch_name}"], cwd=repo_dir)

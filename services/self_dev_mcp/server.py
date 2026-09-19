@@ -2,12 +2,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from github import GithubException
 from mcp.server.fastmcp import FastMCP
 
 from services.common.manifest import FleetManifest
 from services.self_dev_mcp.attempt_tracker import AttemptsExhaustedError, AttemptTracker
 from services.self_dev_mcp.config import load_settings
-from services.self_dev_mcp.git_ops import commit_all, create_branch, push
+from services.self_dev_mcp.git_ops import (
+    GitOpsError,
+    checkout_remote_branch,
+    commit_all,
+    create_branch,
+    push,
+    remote_branch_exists,
+)
 from services.self_dev_mcp.github_client import GitHubClient
 from services.self_dev_mcp.tools import ProtectedPathError
 from services.self_dev_mcp.tools import _resolve_inside_workspace
@@ -38,9 +46,22 @@ def handle_start_issue(issue_number: int, deps: ServerDependencies) -> str:
     issue_key = str(issue_number)
     if issue_key in deps.workspaces:
         return f"ERROR: issue {issue_number} already has an active workspace"
-    workspace_dir = create_workspace(deps.repo_remote)
     branch_name = _branch_name(issue_number)
-    create_branch(workspace_dir, branch_name)
+    try:
+        workspace_dir = create_workspace(deps.repo_remote)
+    except GitOpsError as exc:
+        return f"ERROR: {exc}"
+    try:
+        # A follow-up invocation (e.g. after review comments) must resume on
+        # the same remote branch instead of branching fresh off main, so a
+        # later push can fast-forward rather than being rejected.
+        if remote_branch_exists(workspace_dir, branch_name):
+            checkout_remote_branch(workspace_dir, branch_name)
+        else:
+            create_branch(workspace_dir, branch_name)
+    except GitOpsError as exc:
+        destroy_workspace(workspace_dir)
+        return f"ERROR: {exc}"
     deps.workspaces[issue_key] = workspace_dir
     return branch_name
 
@@ -55,7 +76,10 @@ def handle_write_file(issue_number: int, relative_path: str, content: str, deps:
     except ProtectedPathError as exc:
         return f"REFUSED: {exc}"
     except AttemptsExhaustedError as exc:
-        deps.github_client.comment_on_issue(issue_number, f"Giving up: {exc}")
+        try:
+            deps.github_client.comment_on_issue(issue_number, f"Giving up: {exc}")
+        except GithubException as comment_exc:
+            return f"EXHAUSTED: {exc} (failed to comment on issue: {comment_exc})"
         return f"EXHAUSTED: {exc}"
     return "OK"
 
@@ -69,6 +93,10 @@ def handle_read_file(issue_number: int, relative_path: str, deps: ServerDependen
         return _read_file(workspace_dir, relative_path)
     except ProtectedPathError as exc:
         return f"REFUSED: {exc}"
+    except FileNotFoundError:
+        return f"ERROR: file not found: {relative_path}"
+    except IsADirectoryError as exc:
+        return f"ERROR: {exc}"
 
 
 def handle_run_tests(issue_number: int, service_relative_path: str, deps: ServerDependencies) -> str:
@@ -77,6 +105,10 @@ def handle_run_tests(issue_number: int, service_relative_path: str, deps: Server
         return _missing_workspace_error(issue_number)
     workspace_dir = deps.workspaces[issue_key]
     try:
+        # Validation only: this rejects a service_relative_path that would
+        # escape the workspace. run_local_tests itself always runs with
+        # cwd=workspace_dir, so the original (unresolved) relative path is
+        # what actually gets passed to pytest below.
         _resolve_inside_workspace(workspace_dir, service_relative_path)
     except ProtectedPathError as exc:
         return f"REFUSED: {exc}"
@@ -90,23 +122,35 @@ def handle_submit_pr(issue_number: int, title: str, body: str, deps: ServerDepen
         return _missing_workspace_error(issue_number)
     workspace_dir = deps.workspaces[issue_key]
     branch_name = _branch_name(issue_number)
-    commit_all(workspace_dir, title)
-    push(workspace_dir, branch_name)
-    pr = deps.github_client.open_pr(branch_name, base="main", title=title, body=body)
+    try:
+        commit_all(workspace_dir, title)
+        push(workspace_dir, branch_name)
+        pr = deps.github_client.open_pr(branch_name, base="main", title=title, body=body)
+    except (GitOpsError, GithubException) as exc:
+        # Keep the workspace (and its deps.workspaces entry) on failure so
+        # the agent can fix the problem and retry submit_pr without having
+        # to start_issue (and re-clone) again.
+        return f"ERROR: {exc}"
     destroy_workspace(workspace_dir)
     del deps.workspaces[issue_key]
     return f"opened PR #{pr.number}"
 
 
 def handle_list_assigned_issues(deps: ServerDependencies, label: str = "self-dev") -> str:
-    issues = deps.github_client.list_issues_by_label(label)
+    try:
+        issues = deps.github_client.list_issues_by_label(label)
+    except GithubException as exc:
+        return f"ERROR: {exc}"
     if not issues:
         return f"No open issues labeled {label}"
     return "\n".join(f"#{issue.number} {issue.title}" for issue in issues)
 
 
 def handle_check_pr_status(pr_number: int, deps: ServerDependencies) -> str:
-    return deps.github_client.get_pr_status(pr_number)
+    try:
+        return deps.github_client.get_pr_status(pr_number)
+    except GithubException as exc:
+        return f"ERROR: {exc}"
 
 
 def build_mcp_app() -> FastMCP:
