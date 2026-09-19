@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass, field
 
 from github import GithubException
 from mcp.server.fastmcp import FastMCP
+from mcp.server.sse import SseServerTransport
+from starlette.applications import Starlette
+from starlette.responses import JSONResponse
+from starlette.routing import Mount, Route
 
 from services.common.manifest import FleetManifest
 from services.self_dev_mcp.attempt_tracker import AttemptsExhaustedError, AttemptTracker
@@ -195,5 +200,69 @@ def build_mcp_app() -> FastMCP:
     return app
 
 
+def build_http_app() -> Starlette:
+    """Build a Starlette ASGI app serving Self-Dev MCP over HTTP, plus /health.
+
+    Every blue/green deploy of this service is health-checked over HTTP
+    (see fleet_manifest.yaml's health_check for self-dev-mcp), so it must be
+    servable as an ASGI app with a /health route rather than only over
+    stdio, which has no health endpoint at all.
+
+    mcp==1.2.0's FastMCP has no sse_app()/streamable_http_app() convenience
+    method (those were added in later mcp releases) -- only
+    FastMCP.run_sse_async(), which builds a Starlette app internally and
+    blocks forever on uvicorn.serve(), so it can't be mounted alongside a
+    /health route. This function instead mirrors the exact route
+    construction run_sse_async() itself uses: SseServerTransport (a public
+    class in mcp.server.sse, whose own module docstring documents this same
+    "Starlette app with an SSE route and a POST-message mount" pattern as
+    intended usage) wired to the low-level mcp.server.lowlevel.Server that
+    FastMCP.__init__ already sets up with this app's tool/resource/prompt
+    handlers (self._setup_handlers()). No MCP/SSE/JSON-RPC framing is
+    reimplemented here -- only the ASGI routing glue around the SDK's own
+    transport.
+    """
+    mcp_app = build_mcp_app()
+    sse = SseServerTransport("/messages/")
+
+    async def handle_sse(request):
+        async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
+            await mcp_app._mcp_server.run(
+                streams[0],
+                streams[1],
+                mcp_app._mcp_server.create_initialization_options(),
+            )
+
+    async def health(request):
+        return JSONResponse({"status": "ok"})
+
+    return Starlette(
+        routes=[
+            Route("/health", health, methods=["GET"]),
+            Route("/sse", endpoint=handle_sse),
+            Mount("/messages/", app=sse.handle_post_message),
+        ],
+    )
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the Self-Dev MCP server")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "http"],
+        default="stdio",
+        help="Transport to serve over (default: stdio, for local/CLI use)",
+    )
+    parser.add_argument("--host", default="0.0.0.0", help="HTTP bind host (--transport http only)")
+    parser.add_argument("--port", type=int, default=8080, help="HTTP bind port (--transport http only)")
+    return parser.parse_args(argv)
+
+
 if __name__ == "__main__":
-    build_mcp_app().run()
+    args = _parse_args()
+    if args.transport == "http":
+        import uvicorn
+
+        uvicorn.run(build_http_app(), host=args.host, port=args.port)
+    else:
+        build_mcp_app().run()

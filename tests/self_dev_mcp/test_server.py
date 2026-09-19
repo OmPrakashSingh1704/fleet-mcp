@@ -451,3 +451,77 @@ async def test_build_mcp_app_registers_all_tools(tmp_path, monkeypatch):
         "list_assigned_issues",
         "check_pr_status",
     }
+
+
+# --- Ruling 1: HTTP transport (/health + mounted SSE app) ---
+
+
+def _write_minimal_manifest(tmp_path):
+    manifest_path = tmp_path / "fleet_manifest.yaml"
+    manifest_path.write_text(
+        "services:\n"
+        "  deploy-watcher:\n"
+        "    path: services/deploy_watcher\n"
+        "    protected: true\n"
+    )
+
+
+def _set_server_env(monkeypatch, tmp_path):
+    _write_minimal_manifest(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("SELF_DEV_REPO_REMOTE", "https://example.com/repo.git")
+    monkeypatch.setenv("GITHUB_TOKEN", "fake-token")
+    monkeypatch.setenv("GITHUB_REPO_FULL_NAME", "org/repo")
+
+
+def test_build_http_app_health_endpoint_returns_ok(tmp_path, monkeypatch):
+    _set_server_env(monkeypatch, tmp_path)
+
+    with patch("services.self_dev_mcp.server.GitHubClient") as mock_github_client:
+        mock_github_client.return_value = MagicMock()
+
+        from starlette.testclient import TestClient
+
+        from services.self_dev_mcp.server import build_http_app
+
+        http_app = build_http_app()
+        client = TestClient(http_app)
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_build_http_app_mounts_sse_route(tmp_path, monkeypatch):
+    _set_server_env(monkeypatch, tmp_path)
+
+    with patch("services.self_dev_mcp.server.GitHubClient") as mock_github_client:
+        mock_github_client.return_value = MagicMock()
+
+        from services.self_dev_mcp.server import build_http_app
+
+        http_app = build_http_app()
+
+    route_paths = {getattr(route, "path", None) for route in http_app.routes}
+    assert "/sse" in route_paths
+    assert "/health" in route_paths
+
+
+def test_parse_args_defaults_to_stdio_transport():
+    from services.self_dev_mcp.server import _parse_args
+
+    args = _parse_args([])
+
+    assert args.transport == "stdio"
+    assert args.host == "0.0.0.0"
+    assert args.port == 8080
+
+
+def test_parse_args_accepts_http_transport_with_host_and_port():
+    from services.self_dev_mcp.server import _parse_args
+
+    args = _parse_args(["--transport", "http", "--host", "127.0.0.1", "--port", "9000"])
+
+    assert args.transport == "http"
+    assert args.host == "127.0.0.1"
+    assert args.port == 9000

@@ -1,0 +1,78 @@
+networks:
+  mcp-fleet:
+    name: mcp-fleet
+
+volumes:
+  watcher-data:
+
+services:
+  # Local smoke-test target for the deploy watcher's build/run/health-check
+  # cycle -- not part of the guarded fleet itself.
+  fixture-hello-mcp:
+    build:
+      context: .
+      dockerfile: services/fixture_hello_mcp/Dockerfile
+    image: fixture-hello-mcp
+    networks:
+      - mcp-fleet
+    ports:
+      - "8081:8080"
+    healthcheck:
+      # Slim python images don't ship curl; a stdlib urllib one-liner avoids
+      # adding a package just for the healthcheck.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  self-dev-mcp:
+    build:
+      context: .
+      dockerfile: services/self_dev_mcp/Dockerfile
+    image: self-dev-mcp
+    networks:
+      - mcp-fleet
+    ports:
+      - "8082:8080"
+    environment:
+      SELF_DEV_REPO_REMOTE: ${SELF_DEV_REPO_REMOTE}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      GITHUB_REPO_FULL_NAME: ${GITHUB_REPO_FULL_NAME}
+    # Deliberately no docker.sock mount, no REPO_REMOTE (that's the
+    # watcher's variable, for the fleet repo it deploys), and no deploy
+    # credentials here -- this service must never gain build/deploy
+    # authority over the fleet. It only ever touches its own repo checkout
+    # via SELF_DEV_REPO_REMOTE + GITHUB_TOKEN for git/PR operations.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  deploy-watcher:
+    build:
+      context: .
+      dockerfile: services/deploy_watcher/Dockerfile
+    image: deploy-watcher
+    networks:
+      - mcp-fleet
+    environment:
+      REPO_REMOTE: ${REPO_REMOTE}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      GITHUB_REPO_FULL_NAME: ${GITHUB_REPO_FULL_NAME}
+      CHECKOUT_DIR: /data/checkout
+      REGISTRY_PATH: /data/service_registry.json
+      KNOWN_GOOD_PATH: /data/known_good.json
+    volumes:
+      # Grants build/run authority over every unprotected fleet service --
+      # this is the one place in the fleet where that authority is allowed
+      # to live (see fleet_manifest.yaml: deploy-watcher is protected).
+      # Docker socket access is root-equivalent on the host: anyone who can
+      # reach this socket can run arbitrary containers with arbitrary host
+      # mounts, independent of which user inside the container holds it
+      # (see services/deploy_watcher/Dockerfile for the non-root user this
+      # image still runs as).
+      - /var/run/docker.sock:/var/run/docker.sock
+      - watcher-data:/data
