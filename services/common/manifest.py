@@ -10,6 +10,12 @@ ALWAYS_PROTECTED_PATHS = frozenset({
     "services/common/manifest.py",
 })
 
+# Precomputed normalized form of always-protected paths for consistent comparison
+_ALWAYS_PROTECTED_PATHS_NORMALIZED = frozenset(
+    posixpath.normpath(p.replace("\\", "/").lstrip("/")).casefold()
+    for p in ALWAYS_PROTECTED_PATHS
+)
+
 
 @dataclass
 class ServiceConfig:
@@ -59,10 +65,7 @@ class FleetManifest:
             return True
 
         # Check against always-protected paths (normalized)
-        always_protected_normalized = frozenset(
-            p.casefold() for p in ALWAYS_PROTECTED_PATHS
-        )
-        if normalized in always_protected_normalized:
+        if normalized in _ALWAYS_PROTECTED_PATHS_NORMALIZED:
             return True
 
         # Check against service protections
