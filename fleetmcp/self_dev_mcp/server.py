@@ -16,10 +16,10 @@ from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 
-from services.common.manifest import FleetManifest
-from services.self_dev_mcp.attempt_tracker import AttemptsExhaustedError, AttemptTracker
-from services.self_dev_mcp.config import load_settings
-from services.self_dev_mcp.git_ops import (
+from fleetmcp.common.manifest import FleetManifest
+from fleetmcp.self_dev_mcp.attempt_tracker import AttemptsExhaustedError, AttemptTracker
+from fleetmcp.self_dev_mcp.config import load_settings
+from fleetmcp.self_dev_mcp.git_ops import (
     GitOpsError,
     checkout_remote_branch,
     commit_all,
@@ -27,12 +27,12 @@ from services.self_dev_mcp.git_ops import (
     push,
     remote_branch_exists,
 )
-from services.self_dev_mcp.github_client import GitHubClient
-from services.self_dev_mcp.tools import DEFAULT_TEST_TIMEOUT_SECONDS, ProtectedPathError, validate_test_path
-from services.self_dev_mcp.tools import read_file as _read_file
-from services.self_dev_mcp.tools import run_local_tests as _run_local_tests
-from services.self_dev_mcp.tools import write_file as _write_file
-from services.self_dev_mcp.workspace import create_workspace, destroy_workspace
+from fleetmcp.self_dev_mcp.github_client import GitHubClient
+from fleetmcp.self_dev_mcp.tools import DEFAULT_TEST_TIMEOUT_SECONDS, ProtectedPathError, validate_test_path
+from fleetmcp.self_dev_mcp.tools import read_file as _read_file
+from fleetmcp.self_dev_mcp.tools import run_local_tests as _run_local_tests
+from fleetmcp.self_dev_mcp.tools import write_file as _write_file
+from fleetmcp.self_dev_mcp.workspace import create_workspace, destroy_workspace
 
 # Policy-denial audit trail (spec-required): every REFUSED / EXHAUSTED
 # decision is logged here. Only the repr of the requested path is logged --

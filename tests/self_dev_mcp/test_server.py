@@ -10,10 +10,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from github import GithubException
 
-from services.common.manifest import FleetManifest
-from services.self_dev_mcp.attempt_tracker import AttemptTracker
-from services.self_dev_mcp.git_ops import GitOpsError
-from services.self_dev_mcp.server import (
+from fleetmcp.common.manifest import FleetManifest
+from fleetmcp.self_dev_mcp.attempt_tracker import AttemptTracker
+from fleetmcp.self_dev_mcp.git_ops import GitOpsError
+from fleetmcp.self_dev_mcp.server import (
     ServerDependencies,
     handle_check_pr_status,
     handle_list_assigned_issues,
@@ -30,7 +30,7 @@ def _empty_manifest(tmp_path):
     manifest_path.write_text(
         "services:\n"
         "  deploy-watcher:\n"
-        "    path: services/deploy_watcher\n"
+        "    path: fleetmcp/deploy_watcher\n"
         "    protected: true\n"
     )
     return FleetManifest.load(str(manifest_path))
@@ -46,9 +46,9 @@ def _deps(tmp_path):
     )
 
 
-@patch("services.self_dev_mcp.server.remote_branch_exists")
-@patch("services.self_dev_mcp.server.create_workspace")
-@patch("services.self_dev_mcp.server.create_branch")
+@patch("fleetmcp.self_dev_mcp.server.remote_branch_exists")
+@patch("fleetmcp.self_dev_mcp.server.create_workspace")
+@patch("fleetmcp.self_dev_mcp.server.create_branch")
 def test_handle_start_issue_creates_workspace_and_branch(
     mock_create_branch, mock_create_workspace, mock_remote_branch_exists, tmp_path
 ):
@@ -70,10 +70,10 @@ def test_handle_write_file_writes_to_tracked_workspace(tmp_path):
     deps = _deps(tmp_path)
     deps.workspaces["1"] = str(workspace)
 
-    result = handle_write_file(1, "services/fixture_hello_mcp/server.py", "print('hi')", deps)
+    result = handle_write_file(1, "fleetmcp/fixture_hello_mcp/server.py", "print('hi')", deps)
 
     assert result == "OK"
-    assert (workspace / "services" / "fixture_hello_mcp" / "server.py").read_text() == "print('hi')"
+    assert (workspace / "fleetmcp" / "fixture_hello_mcp" / "server.py").read_text() == "print('hi')"
 
 
 def test_handle_write_file_refuses_protected_path_and_returns_message(tmp_path):
@@ -82,10 +82,10 @@ def test_handle_write_file_refuses_protected_path_and_returns_message(tmp_path):
     deps = _deps(tmp_path)
     deps.workspaces["1"] = str(workspace)
 
-    result = handle_write_file(1, "services/deploy_watcher/deploy_manager.py", "bad", deps)
+    result = handle_write_file(1, "fleetmcp/deploy_watcher/deploy_manager.py", "bad", deps)
 
     assert result.startswith("REFUSED")
-    assert not (workspace / "services" / "deploy_watcher" / "deploy_manager.py").exists()
+    assert not (workspace / "fleetmcp" / "deploy_watcher" / "deploy_manager.py").exists()
 
 
 def test_handle_write_file_comments_on_issue_and_reports_when_exhausted(tmp_path):
@@ -103,8 +103,8 @@ def test_handle_write_file_comments_on_issue_and_reports_when_exhausted(tmp_path
     assert deps.github_client.comment_on_issue.call_args[0][0] == 1
 
 
-@patch("services.self_dev_mcp.server.push")
-@patch("services.self_dev_mcp.server.commit_all")
+@patch("fleetmcp.self_dev_mcp.server.push")
+@patch("fleetmcp.self_dev_mcp.server.commit_all")
 def test_handle_submit_pr_commits_pushes_opens_pr_and_cleans_up(mock_commit_all, mock_push, tmp_path):
     mock_commit_all.return_value = "abc123"
     workspace = tmp_path / "workspace"
@@ -188,7 +188,7 @@ def test_handle_run_tests_refuses_escaping_service_path(tmp_path):
     deps = _deps(tmp_path)
     deps.workspaces["1"] = str(workspace)
 
-    with patch("services.self_dev_mcp.server._run_local_tests") as mock_run:
+    with patch("fleetmcp.self_dev_mcp.server._run_local_tests") as mock_run:
         result = handle_run_tests(1, "../../escape", deps)
 
     assert result.startswith("REFUSED")
@@ -201,7 +201,7 @@ def test_handle_run_tests_runs_for_valid_path(tmp_path):
     deps = _deps(tmp_path)
     deps.workspaces["1"] = str(workspace)
 
-    with patch("services.self_dev_mcp.server._run_local_tests") as mock_run:
+    with patch("fleetmcp.self_dev_mcp.server._run_local_tests") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
         result = handle_run_tests(1, "services/foo", deps)
 
@@ -212,9 +212,9 @@ def test_handle_run_tests_runs_for_valid_path(tmp_path):
 # --- Ruling 4: duplicate-attempt guard ---
 
 
-@patch("services.self_dev_mcp.server.remote_branch_exists")
-@patch("services.self_dev_mcp.server.create_workspace")
-@patch("services.self_dev_mcp.server.create_branch")
+@patch("fleetmcp.self_dev_mcp.server.remote_branch_exists")
+@patch("fleetmcp.self_dev_mcp.server.create_workspace")
+@patch("fleetmcp.self_dev_mcp.server.create_branch")
 def test_handle_start_issue_twice_returns_error_and_does_not_reclone(
     mock_create_branch, mock_create_workspace, mock_remote_branch_exists, tmp_path
 ):
@@ -268,7 +268,7 @@ def test_handle_submit_pr_missing_workspace_returns_error(tmp_path):
 # --- Fix round 1, Part A: error-handling contract (handlers never raise) ---
 
 
-@patch("services.self_dev_mcp.server.commit_all")
+@patch("fleetmcp.self_dev_mcp.server.commit_all")
 def test_handle_submit_pr_commit_failure_returns_error_and_keeps_workspace(mock_commit_all, tmp_path):
     mock_commit_all.side_effect = GitOpsError("nothing to commit")
     workspace = tmp_path / "workspace"
@@ -283,8 +283,8 @@ def test_handle_submit_pr_commit_failure_returns_error_and_keeps_workspace(mock_
     assert workspace.exists()
 
 
-@patch("services.self_dev_mcp.server.push")
-@patch("services.self_dev_mcp.server.commit_all")
+@patch("fleetmcp.self_dev_mcp.server.push")
+@patch("fleetmcp.self_dev_mcp.server.commit_all")
 def test_handle_submit_pr_open_pr_failure_returns_error_and_keeps_workspace(mock_commit_all, mock_push, tmp_path):
     mock_commit_all.return_value = "abc123"
     workspace = tmp_path / "workspace"
@@ -300,10 +300,10 @@ def test_handle_submit_pr_open_pr_failure_returns_error_and_keeps_workspace(mock
     assert workspace.exists()
 
 
-@patch("services.self_dev_mcp.server.destroy_workspace")
-@patch("services.self_dev_mcp.server.remote_branch_exists")
-@patch("services.self_dev_mcp.server.create_workspace")
-@patch("services.self_dev_mcp.server.create_branch")
+@patch("fleetmcp.self_dev_mcp.server.destroy_workspace")
+@patch("fleetmcp.self_dev_mcp.server.remote_branch_exists")
+@patch("fleetmcp.self_dev_mcp.server.create_workspace")
+@patch("fleetmcp.self_dev_mcp.server.create_branch")
 def test_handle_start_issue_create_branch_failure_destroys_workspace(
     mock_create_branch, mock_create_workspace, mock_remote_branch_exists, mock_destroy_workspace, tmp_path
 ):
@@ -366,10 +366,10 @@ def test_handle_check_pr_status_github_failure_returns_error(tmp_path):
 # --- Fix round 1, Part D: follow-up commits to an existing PR branch ---
 
 
-@patch("services.self_dev_mcp.server.checkout_remote_branch")
-@patch("services.self_dev_mcp.server.remote_branch_exists")
-@patch("services.self_dev_mcp.server.create_workspace")
-@patch("services.self_dev_mcp.server.create_branch")
+@patch("fleetmcp.self_dev_mcp.server.checkout_remote_branch")
+@patch("fleetmcp.self_dev_mcp.server.remote_branch_exists")
+@patch("fleetmcp.self_dev_mcp.server.create_workspace")
+@patch("fleetmcp.self_dev_mcp.server.create_branch")
 def test_handle_start_issue_resumes_existing_remote_branch(
     mock_create_branch, mock_create_workspace, mock_remote_branch_exists, mock_checkout_remote_branch, tmp_path
 ):
@@ -384,10 +384,10 @@ def test_handle_start_issue_resumes_existing_remote_branch(
     mock_create_branch.assert_not_called()
 
 
-@patch("services.self_dev_mcp.server.checkout_remote_branch")
-@patch("services.self_dev_mcp.server.remote_branch_exists")
-@patch("services.self_dev_mcp.server.create_workspace")
-@patch("services.self_dev_mcp.server.create_branch")
+@patch("fleetmcp.self_dev_mcp.server.checkout_remote_branch")
+@patch("fleetmcp.self_dev_mcp.server.remote_branch_exists")
+@patch("fleetmcp.self_dev_mcp.server.create_workspace")
+@patch("fleetmcp.self_dev_mcp.server.create_branch")
 def test_handle_start_issue_creates_new_branch_when_no_remote_branch(
     mock_create_branch, mock_create_workspace, mock_remote_branch_exists, mock_checkout_remote_branch, tmp_path
 ):
@@ -402,10 +402,10 @@ def test_handle_start_issue_creates_new_branch_when_no_remote_branch(
     mock_checkout_remote_branch.assert_not_called()
 
 
-@patch("services.self_dev_mcp.server.destroy_workspace")
-@patch("services.self_dev_mcp.server.checkout_remote_branch")
-@patch("services.self_dev_mcp.server.remote_branch_exists")
-@patch("services.self_dev_mcp.server.create_workspace")
+@patch("fleetmcp.self_dev_mcp.server.destroy_workspace")
+@patch("fleetmcp.self_dev_mcp.server.checkout_remote_branch")
+@patch("fleetmcp.self_dev_mcp.server.remote_branch_exists")
+@patch("fleetmcp.self_dev_mcp.server.create_workspace")
 def test_handle_start_issue_checkout_remote_branch_failure_destroys_workspace(
     mock_create_workspace, mock_remote_branch_exists, mock_checkout_remote_branch, mock_destroy_workspace, tmp_path
 ):
@@ -432,7 +432,7 @@ def test_build_mcp_app_registers_all_tools(tmp_path, monkeypatch):
     manifest_path.write_text(
         "services:\n"
         "  deploy-watcher:\n"
-        "    path: services/deploy_watcher\n"
+        "    path: fleetmcp/deploy_watcher\n"
         "    protected: true\n"
     )
     monkeypatch.chdir(tmp_path)
@@ -440,10 +440,10 @@ def test_build_mcp_app_registers_all_tools(tmp_path, monkeypatch):
     monkeypatch.setenv("SELF_DEV_GITHUB_TOKEN", "fake-token")
     monkeypatch.setenv("GITHUB_REPO_FULL_NAME", "org/repo")
 
-    with patch("services.self_dev_mcp.server.GitHubClient") as mock_github_client:
+    with patch("fleetmcp.self_dev_mcp.server.GitHubClient") as mock_github_client:
         mock_github_client.return_value = MagicMock()
 
-        from services.self_dev_mcp.server import build_mcp_app
+        from fleetmcp.self_dev_mcp.server import build_mcp_app
 
         app = build_mcp_app()
         tools = asyncio.run(app.list_tools())
@@ -468,7 +468,7 @@ def _write_minimal_manifest(tmp_path):
     manifest_path.write_text(
         "services:\n"
         "  deploy-watcher:\n"
-        "    path: services/deploy_watcher\n"
+        "    path: fleetmcp/deploy_watcher\n"
         "    protected: true\n"
     )
 
@@ -484,12 +484,12 @@ def _set_server_env(monkeypatch, tmp_path):
 def test_build_http_app_health_endpoint_returns_ok(tmp_path, monkeypatch):
     _set_server_env(monkeypatch, tmp_path)
 
-    with patch("services.self_dev_mcp.server.GitHubClient") as mock_github_client:
+    with patch("fleetmcp.self_dev_mcp.server.GitHubClient") as mock_github_client:
         mock_github_client.return_value = MagicMock()
 
         from starlette.testclient import TestClient
 
-        from services.self_dev_mcp.server import build_http_app
+        from fleetmcp.self_dev_mcp.server import build_http_app
 
         http_app = build_http_app()
         client = TestClient(http_app)
@@ -502,10 +502,10 @@ def test_build_http_app_health_endpoint_returns_ok(tmp_path, monkeypatch):
 def test_build_http_app_mounts_sse_route(tmp_path, monkeypatch):
     _set_server_env(monkeypatch, tmp_path)
 
-    with patch("services.self_dev_mcp.server.GitHubClient") as mock_github_client:
+    with patch("fleetmcp.self_dev_mcp.server.GitHubClient") as mock_github_client:
         mock_github_client.return_value = MagicMock()
 
-        from services.self_dev_mcp.server import build_http_app
+        from fleetmcp.self_dev_mcp.server import build_http_app
 
         http_app = build_http_app()
 
@@ -515,7 +515,7 @@ def test_build_http_app_mounts_sse_route(tmp_path, monkeypatch):
 
 
 def test_parse_args_defaults_to_stdio_transport():
-    from services.self_dev_mcp.server import _parse_args
+    from fleetmcp.self_dev_mcp.server import _parse_args
 
     args = _parse_args([])
 
@@ -525,7 +525,7 @@ def test_parse_args_defaults_to_stdio_transport():
 
 
 def test_parse_args_accepts_http_transport_with_host_and_port():
-    from services.self_dev_mcp.server import _parse_args
+    from fleetmcp.self_dev_mcp.server import _parse_args
 
     args = _parse_args(["--transport", "http", "--host", "127.0.0.1", "--port", "9000"])
 
@@ -559,7 +559,7 @@ def _deps_with_workspace(tmp_path):
 def test_handle_run_tests_refuses_option_like_path(tmp_path, bad_path):
     deps, _workspace = _deps_with_workspace(tmp_path)
 
-    with patch("services.self_dev_mcp.server._run_local_tests") as mock_run:
+    with patch("fleetmcp.self_dev_mcp.server._run_local_tests") as mock_run:
         result = handle_run_tests(1, bad_path, deps)
 
     assert result.startswith("REFUSED")
@@ -571,7 +571,7 @@ def test_handle_run_tests_timeout_returns_error(tmp_path):
     deps.test_timeout_seconds = 7
 
     with patch(
-        "services.self_dev_mcp.tools.subprocess.run",
+        "fleetmcp.self_dev_mcp.tools.subprocess.run",
         side_effect=subprocess.TimeoutExpired(cmd="pytest", timeout=7),
     ) as mock_run:
         result = handle_run_tests(1, "services/foo", deps)
@@ -583,7 +583,7 @@ def test_handle_run_tests_timeout_returns_error(tmp_path):
 def test_handle_run_tests_reports_failed_exit_code(tmp_path):
     deps, _workspace = _deps_with_workspace(tmp_path)
 
-    with patch("services.self_dev_mcp.server._run_local_tests") as mock_run:
+    with patch("fleetmcp.self_dev_mcp.server._run_local_tests") as mock_run:
         mock_run.return_value = MagicMock(returncode=1, stdout="1 failed", stderr="warn")
         result = handle_run_tests(1, "services/foo", deps)
 
@@ -594,7 +594,7 @@ def test_handle_run_tests_passes_path_after_double_dash_and_strips_tokens(tmp_pa
     deps, workspace = _deps_with_workspace(tmp_path)
     monkeypatch.setenv("SELF_DEV_GITHUB_TOKEN", "secret-self-dev")
 
-    with patch("services.self_dev_mcp.tools.subprocess.run") as mock_run:
+    with patch("fleetmcp.self_dev_mcp.tools.subprocess.run") as mock_run:
         mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
         handle_run_tests(1, "services/foo", deps)
 
@@ -607,7 +607,7 @@ def test_handle_run_tests_passes_path_after_double_dash_and_strips_tokens(tmp_pa
 def test_handle_run_tests_oserror_returns_error(tmp_path):
     deps, _workspace = _deps_with_workspace(tmp_path)
 
-    with patch("services.self_dev_mcp.server._run_local_tests", side_effect=FileNotFoundError("python")):
+    with patch("fleetmcp.self_dev_mcp.server._run_local_tests", side_effect=FileNotFoundError("python")):
         result = handle_run_tests(1, "services/foo", deps)
 
     assert result.startswith("ERROR")
@@ -616,9 +616,9 @@ def test_handle_run_tests_oserror_returns_error(tmp_path):
 def test_registered_tools_are_coroutine_functions(tmp_path, monkeypatch):
     _set_server_env(monkeypatch, tmp_path)
 
-    with patch("services.self_dev_mcp.server.GitHubClient") as mock_github_client:
+    with patch("fleetmcp.self_dev_mcp.server.GitHubClient") as mock_github_client:
         mock_github_client.return_value = MagicMock()
-        from services.self_dev_mcp.server import build_mcp_app
+        from fleetmcp.self_dev_mcp.server import build_mcp_app
 
         app = build_mcp_app()
 
@@ -636,9 +636,9 @@ def test_async_tool_runs_handler_off_the_event_loop_thread(tmp_path, monkeypatch
         seen["thread"] = threading.get_ident()
         return "OK (exit 0)\n"
 
-    with patch("services.self_dev_mcp.server.GitHubClient") as mock_github_client:
+    with patch("fleetmcp.self_dev_mcp.server.GitHubClient") as mock_github_client:
         mock_github_client.return_value = MagicMock()
-        from services.self_dev_mcp.server import build_mcp_app
+        from fleetmcp.self_dev_mcp.server import build_mcp_app
 
         app = build_mcp_app()
 
@@ -648,7 +648,7 @@ def test_async_tool_runs_handler_off_the_event_loop_thread(tmp_path, monkeypatch
         # pydantic path that emits a DeprecationWarning on newer pydantic).
         return await app._tool_manager.get_tool("run_tests").fn(issue_number=1, service_relative_path="x")
 
-    with patch("services.self_dev_mcp.server.handle_run_tests", fake_handle_run_tests):
+    with patch("fleetmcp.self_dev_mcp.server.handle_run_tests", fake_handle_run_tests):
         result = asyncio.run(call())
 
     assert result == "OK (exit 0)\n"
@@ -668,7 +668,7 @@ def test_handlers_refuse_git_metadata_paths(tmp_path, git_path):
 
     write_result = handle_write_file(1, git_path, '[remote "origin"]\n', deps)
     read_result = handle_read_file(1, git_path, deps)
-    with patch("services.self_dev_mcp.server._run_local_tests") as mock_run:
+    with patch("fleetmcp.self_dev_mcp.server._run_local_tests") as mock_run:
         tests_result = handle_run_tests(1, git_path, deps)
 
     assert write_result.startswith("REFUSED"), write_result
@@ -691,14 +691,14 @@ def test_audit_log_on_protected_write(tmp_path, caplog):
     deps, _workspace = _deps_with_workspace(tmp_path)
 
     with caplog.at_level(logging.WARNING, logger="fleet_mcp.audit"):
-        handle_write_file(1, "services/deploy_watcher/x.py", "SECRET-CONTENT", deps)
+        handle_write_file(1, "fleetmcp/deploy_watcher/x.py", "SECRET-CONTENT", deps)
 
     records = _audit_records(caplog)
     assert len(records) == 1
     message = records[0].getMessage()
     assert records[0].levelno == logging.WARNING
     assert message.startswith(
-        "policy-denial tool=write_file issue=1 path='services/deploy_watcher/x.py' reason=REFUSED"
+        "policy-denial tool=write_file issue=1 path='fleetmcp/deploy_watcher/x.py' reason=REFUSED"
     )
     assert "SECRET-CONTENT" not in message
 
@@ -764,7 +764,7 @@ def test_handle_read_file_directory_returns_error(tmp_path):
 def test_handle_write_file_oserror_returns_error(tmp_path):
     deps, _workspace = _deps_with_workspace(tmp_path)
 
-    with patch("services.self_dev_mcp.server._write_file", side_effect=PermissionError("denied")):
+    with patch("fleetmcp.self_dev_mcp.server._write_file", side_effect=PermissionError("denied")):
         assert handle_write_file(1, "a.py", "x", deps) == "ERROR: denied"
 
 
@@ -783,8 +783,8 @@ def test_github_network_errors_return_error(tmp_path, method):
     assert result.startswith("ERROR")
 
 
-@patch("services.self_dev_mcp.server.push")
-@patch("services.self_dev_mcp.server.commit_all")
+@patch("fleetmcp.self_dev_mcp.server.push")
+@patch("fleetmcp.self_dev_mcp.server.commit_all")
 def test_handle_submit_pr_network_error_returns_error_and_keeps_workspace(mock_commit_all, mock_push, tmp_path):
     import requests
 
@@ -808,7 +808,7 @@ def test_handle_write_file_exhausted_comment_network_error(tmp_path):
     assert result.startswith("EXHAUSTED") and "failed to comment" in result
 
 
-@patch("services.self_dev_mcp.server.create_workspace", side_effect=OSError("disk full"))
+@patch("fleetmcp.self_dev_mcp.server.create_workspace", side_effect=OSError("disk full"))
 def test_handle_start_issue_oserror_returns_error(mock_create_workspace, tmp_path):
     deps = _deps(tmp_path)
 
@@ -828,9 +828,9 @@ def test_handle_start_issue_concurrent_calls_clone_once(tmp_path):
         release.wait(5)
         return str(tmp_path / "ws")
 
-    with patch("services.self_dev_mcp.server.create_workspace", side_effect=slow_create_workspace), patch(
-        "services.self_dev_mcp.server.remote_branch_exists", return_value=False
-    ), patch("services.self_dev_mcp.server.create_branch"):
+    with patch("fleetmcp.self_dev_mcp.server.create_workspace", side_effect=slow_create_workspace), patch(
+        "fleetmcp.self_dev_mcp.server.remote_branch_exists", return_value=False
+    ), patch("fleetmcp.self_dev_mcp.server.create_branch"):
         results = []
         worker = threading.Thread(target=lambda: results.append(handle_start_issue(1, deps)))
         worker.start()

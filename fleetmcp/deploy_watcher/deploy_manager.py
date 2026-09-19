@@ -9,10 +9,10 @@ from typing import Any, Callable, Optional
 
 import docker.errors
 
-from services.deploy_watcher.health import wait_for_healthy
-from services.deploy_watcher.image_builder import build_image
-from services.deploy_watcher.known_good import KnownGoodStore
-from services.deploy_watcher.registry import ServiceRegistry
+from fleetmcp.deploy_watcher.health import wait_for_healthy
+from fleetmcp.deploy_watcher.image_builder import build_image
+from fleetmcp.deploy_watcher.known_good import KnownGoodStore
+from fleetmcp.deploy_watcher.registry import ServiceRegistry
 
 _logger = logging.getLogger(__name__)
 

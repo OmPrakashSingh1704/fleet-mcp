@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from services.deploy_watcher.checkout import CheckoutError, sync_checkout
+from fleetmcp.deploy_watcher.checkout import CheckoutError, sync_checkout
 
 
 def _run(args, cwd=None):
@@ -117,7 +117,7 @@ def test_sync_checkout_redacts_remote_url_containing_token_on_fetch_failure(tmp_
 def test_sync_checkout_rejects_option_shaped_or_malformed_sha_without_invoking_git(tmp_path, bad_sha):
     checkout_dir = tmp_path / "checkout"
 
-    with patch("services.deploy_watcher.checkout.subprocess.run") as mock_run:
+    with patch("fleetmcp.deploy_watcher.checkout.subprocess.run") as mock_run:
         with pytest.raises(CheckoutError):
             sync_checkout("git@example.invalid:org/repo.git", str(checkout_dir), bad_sha)
 
@@ -132,14 +132,14 @@ WATCHER_SECRET = "ghp_WATCHERSECRETVALUE456"
 def test_clone_and_fetch_use_env_reading_credential_helper_without_token_in_argv(tmp_path, monkeypatch):
     import subprocess as _subprocess
 
-    from services.deploy_watcher import checkout
+    from fleetmcp.deploy_watcher import checkout
 
     monkeypatch.setenv("WATCHER_GITHUB_TOKEN", WATCHER_SECRET)
 
     def ok(*args, **kwargs):
         return _subprocess.CompletedProcess(args=args[0], returncode=0, stdout="", stderr="")
 
-    with patch("services.deploy_watcher.checkout.subprocess.run", side_effect=ok) as mock_run:
+    with patch("fleetmcp.deploy_watcher.checkout.subprocess.run", side_effect=ok) as mock_run:
         sync_checkout("https://github.com/org/private.git", str(tmp_path / "co"), "a" * 40)
 
     subcommands = []
@@ -162,7 +162,7 @@ def test_checkout_error_strips_userinfo_and_token(monkeypatch, tmp_path):
     def fail(*args, **kwargs):
         return _subprocess.CompletedProcess(args=args[0], returncode=128, stdout="", stderr=stderr)
 
-    with patch("services.deploy_watcher.checkout.subprocess.run", side_effect=fail):
+    with patch("fleetmcp.deploy_watcher.checkout.subprocess.run", side_effect=fail):
         with pytest.raises(CheckoutError) as exc_info:
             sync_checkout("https://github.com/org/repo.git", str(tmp_path / "co"), "a" * 40)
 

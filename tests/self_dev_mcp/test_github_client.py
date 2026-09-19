@@ -1,10 +1,10 @@
 from unittest.mock import MagicMock, patch
 
 from github import Auth
-from services.self_dev_mcp.github_client import GitHubClient
+from fleetmcp.self_dev_mcp.github_client import GitHubClient
 
 
-@patch("services.self_dev_mcp.github_client.Github")
+@patch("fleetmcp.self_dev_mcp.github_client.Github")
 def test_list_issues_by_label_delegates_to_repo(mock_github_cls):
     mock_repo = MagicMock()
     issue1 = MagicMock(pull_request=None)
@@ -19,7 +19,7 @@ def test_list_issues_by_label_delegates_to_repo(mock_github_cls):
     mock_repo.get_issues.assert_called_once_with(state="open", labels=["self-dev"])
 
 
-@patch("services.self_dev_mcp.github_client.Github")
+@patch("fleetmcp.self_dev_mcp.github_client.Github")
 def test_list_issues_by_label_filters_out_pull_requests(mock_github_cls):
     mock_repo = MagicMock()
     real_issue = MagicMock(pull_request=None)
@@ -33,7 +33,7 @@ def test_list_issues_by_label_filters_out_pull_requests(mock_github_cls):
     assert issues == [real_issue]
 
 
-@patch("services.self_dev_mcp.github_client.Github")
+@patch("fleetmcp.self_dev_mcp.github_client.Github")
 def test_open_pr_delegates_to_repo(mock_github_cls):
     mock_repo = MagicMock()
     mock_repo.get_pulls.return_value = []
@@ -50,7 +50,7 @@ def test_open_pr_delegates_to_repo(mock_github_cls):
     )
 
 
-@patch("services.self_dev_mcp.github_client.Github")
+@patch("fleetmcp.self_dev_mcp.github_client.Github")
 def test_open_pr_returns_existing_pr_without_creating_duplicate(mock_github_cls):
     mock_repo = MagicMock()
     mock_repo.owner.login = "org"
@@ -66,7 +66,7 @@ def test_open_pr_returns_existing_pr_without_creating_duplicate(mock_github_cls)
     mock_repo.create_pull.assert_not_called()
 
 
-@patch("services.self_dev_mcp.github_client.Github")
+@patch("fleetmcp.self_dev_mcp.github_client.Github")
 def test_get_pr_status_all_check_runs_success(mock_github_cls):
     mock_repo = MagicMock()
     mock_pr = MagicMock()
@@ -87,7 +87,7 @@ def test_get_pr_status_all_check_runs_success(mock_github_cls):
     mock_repo.get_commit.assert_called_once_with("abc123")
 
 
-@patch("services.self_dev_mcp.github_client.Github")
+@patch("fleetmcp.self_dev_mcp.github_client.Github")
 def test_get_pr_status_one_check_run_failure(mock_github_cls):
     mock_repo = MagicMock()
     mock_pr = MagicMock()
@@ -106,7 +106,7 @@ def test_get_pr_status_one_check_run_failure(mock_github_cls):
     assert status == "failure"
 
 
-@patch("services.self_dev_mcp.github_client.Github")
+@patch("fleetmcp.self_dev_mcp.github_client.Github")
 def test_get_pr_status_one_check_run_in_progress(mock_github_cls):
     mock_repo = MagicMock()
     mock_pr = MagicMock()
@@ -125,7 +125,7 @@ def test_get_pr_status_one_check_run_in_progress(mock_github_cls):
     assert status == "pending"
 
 
-@patch("services.self_dev_mcp.github_client.Github")
+@patch("fleetmcp.self_dev_mcp.github_client.Github")
 def test_get_pr_status_no_check_runs(mock_github_cls):
     mock_repo = MagicMock()
     mock_pr = MagicMock()
@@ -142,7 +142,7 @@ def test_get_pr_status_no_check_runs(mock_github_cls):
     assert status == "pending"
 
 
-@patch("services.self_dev_mcp.github_client.Github")
+@patch("fleetmcp.self_dev_mcp.github_client.Github")
 def test_comment_on_issue_delegates_to_repo(mock_github_cls):
     mock_repo = MagicMock()
     mock_issue = MagicMock()
@@ -156,7 +156,7 @@ def test_comment_on_issue_delegates_to_repo(mock_github_cls):
     mock_issue.create_comment.assert_called_once_with("giving up")
 
 
-@patch("services.self_dev_mcp.github_client.Github")
+@patch("fleetmcp.self_dev_mcp.github_client.Github")
 def test_github_client_uses_auth_token(mock_github_cls):
     mock_repo = MagicMock()
     mock_github_cls.return_value.get_repo.return_value = mock_repo
@@ -174,14 +174,14 @@ def test_github_client_uses_auth_token(mock_github_cls):
 # --- Ruling A: lazy repo resolution (a bad token must not crash __init__) ---
 
 
-@patch("services.self_dev_mcp.github_client.Github")
+@patch("fleetmcp.self_dev_mcp.github_client.Github")
 def test_constructing_client_makes_no_get_repo_call(mock_github_cls):
     GitHubClient("token", "org/repo")
 
     mock_github_cls.return_value.get_repo.assert_not_called()
 
 
-@patch("services.self_dev_mcp.github_client.Github")
+@patch("fleetmcp.self_dev_mcp.github_client.Github")
 def test_first_method_call_resolves_repo_once_and_second_call_reuses_it(mock_github_cls):
     mock_repo = MagicMock()
     mock_issue = MagicMock()

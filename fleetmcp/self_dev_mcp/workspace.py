@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 
-from services.self_dev_mcp.git_ops import clone
+from fleetmcp.self_dev_mcp.git_ops import clone
 
 
 def create_workspace(remote_url: str) -> str:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from services.self_dev_mcp.tools import DEFAULT_TEST_TIMEOUT_SECONDS
+from fleetmcp.self_dev_mcp.tools import DEFAULT_TEST_TIMEOUT_SECONDS
 
 
 @dataclass

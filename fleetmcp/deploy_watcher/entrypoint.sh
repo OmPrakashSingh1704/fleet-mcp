@@ -6,7 +6,7 @@ set -eu
 # privileges before running the real command. This exists because the GID
 # that owns docker.sock varies by host and isn't known at image build time
 # (on Docker Desktop it's root:root 660 -- see the comment below and in
-# services/deploy_watcher/Dockerfile for why that's still acceptable).
+# fleetmcp/deploy_watcher/Dockerfile for why that's still acceptable).
 
 SOCK=/var/run/docker.sock
 
