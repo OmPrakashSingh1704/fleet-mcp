@@ -46,3 +46,10 @@ def test_commit_all_raises_on_empty_commit(tmp_path):
     import pytest
     with pytest.raises(git_ops.GitOpsError):
         git_ops.commit_all(str(workspace), "nothing changed")
+
+
+def test_clone_raises_git_ops_error_on_invalid_url(tmp_path):
+    import pytest
+    workspace = tmp_path / "workspace"
+    with pytest.raises(git_ops.GitOpsError):
+        git_ops.clone("git://invalid-url-that-does-not-exist.git", str(workspace))
