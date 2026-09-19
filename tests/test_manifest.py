@@ -70,3 +70,50 @@ def test_get_and_all_services(tmp_path):
     assert service.container == "fixture-hello-mcp"
     assert service.health_check == "http://fixture-hello-mcp:8080/health"
     assert manifest.all_services() == [service]
+
+
+def test_backslash_path_normalization(tmp_path):
+    path = _write_manifest(tmp_path, """
+        services:
+          deploy-watcher:
+            path: services/deploy_watcher
+            protected: true
+    """)
+    manifest = FleetManifest.load(path)
+    # Windows-style path with backslashes should be normalized and recognized as protected
+    assert manifest.is_path_protected("services\\deploy_watcher\\file.py")
+
+
+def test_case_insensitive_always_protected_paths(tmp_path):
+    path = _write_manifest(tmp_path, "services: {}")
+    manifest = FleetManifest.load(path)
+    # Case variations of always-protected paths should be protected
+    assert manifest.is_path_protected("FLEET_MANIFEST.YAML")
+    assert manifest.is_path_protected("Fleet_Manifest.Yaml")
+    assert manifest.is_path_protected("SERVICES/COMMON/MANIFEST.PY")
+    assert manifest.is_path_protected("Services/Common/Manifest.Py")
+
+
+def test_dot_segment_collapsing(tmp_path):
+    path = _write_manifest(tmp_path, "services: {}")
+    manifest = FleetManifest.load(path)
+    # Paths with . and .. segments should be canonicalized before comparison
+    assert manifest.is_path_protected("./fleet_manifest.yaml")
+    assert manifest.is_path_protected("./services/common/manifest.py")
+    assert manifest.is_path_protected("services/../services/common/manifest.py")
+    assert manifest.is_path_protected("services/./common/manifest.py")
+
+
+def test_path_escape_refusal(tmp_path):
+    path = _write_manifest(tmp_path, """
+        services:
+          fixture-hello-mcp:
+            path: services/fixture_hello_mcp
+            protected: false
+    """)
+    manifest = FleetManifest.load(path)
+    # Paths that escape the repo root via .. should be treated as protected
+    # regardless of manifest content — they're escape attempts
+    assert manifest.is_path_protected("../../etc/passwd")
+    assert manifest.is_path_protected("../../../secret")
+    assert manifest.is_path_protected("services/fixture_hello_mcp/../../../../../../etc/passwd")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import posixpath
 from dataclasses import dataclass, field
 
 import yaml
@@ -47,14 +48,40 @@ class FleetManifest:
         return list(self._services.values())
 
     def is_path_protected(self, relative_path: str) -> bool:
-        normalized = relative_path.replace("\\", "/").lstrip("/")
-        if normalized in ALWAYS_PROTECTED_PATHS:
+        # Canonicalize the query path: backslash -> forward slash, then normalize
+        # dot segments and duplicate slashes, then case-fold for case-insensitive comparison
+        normalized = posixpath.normpath(
+            relative_path.replace("\\", "/").lstrip("/")
+        ).casefold()
+
+        # Reject paths that escape the repo root (contain .. after normalization)
+        if normalized.startswith("..") or "/.." in normalized:
             return True
+
+        # Check against always-protected paths (normalized)
+        always_protected_normalized = frozenset(
+            p.casefold() for p in ALWAYS_PROTECTED_PATHS
+        )
+        if normalized in always_protected_normalized:
+            return True
+
+        # Check against service protections
         for service in self._services.values():
-            service_prefix = service.path.rstrip("/") + "/"
+            # Normalize the service path
+            service_path_normalized = posixpath.normpath(
+                service.path.replace("\\", "/").lstrip("/")
+            ).casefold()
+            service_prefix = service_path_normalized.rstrip("/") + "/"
+
             if service.protected and normalized.startswith(service_prefix):
                 return True
+
+            # Check specific protected paths
             for protected_path in service.protected_paths:
-                if normalized == protected_path.replace("\\", "/"):
+                protected_normalized = posixpath.normpath(
+                    protected_path.replace("\\", "/").lstrip("/")
+                ).casefold()
+                if normalized == protected_normalized:
                     return True
+
         return False
