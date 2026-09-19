@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import logging
+import subprocess
+import sys
+import threading
 from dataclasses import dataclass, field
 
+import anyio.to_thread
+import requests
 from github import GithubException
 from mcp.server.fastmcp import FastMCP
 from mcp.server.sse import SseServerTransport
@@ -22,12 +28,26 @@ from services.self_dev_mcp.git_ops import (
     remote_branch_exists,
 )
 from services.self_dev_mcp.github_client import GitHubClient
-from services.self_dev_mcp.tools import ProtectedPathError
-from services.self_dev_mcp.tools import _resolve_inside_workspace
+from services.self_dev_mcp.tools import DEFAULT_TEST_TIMEOUT_SECONDS, ProtectedPathError, validate_test_path
 from services.self_dev_mcp.tools import read_file as _read_file
 from services.self_dev_mcp.tools import run_local_tests as _run_local_tests
 from services.self_dev_mcp.tools import write_file as _write_file
 from services.self_dev_mcp.workspace import create_workspace, destroy_workspace
+
+# Policy-denial audit trail (spec-required): every REFUSED / EXHAUSTED
+# decision is logged here. Only the repr of the requested path is logged --
+# never file content.
+audit_logger = logging.getLogger("fleet_mcp.audit")
+
+# GitHub-facing errors a handler converts to "ERROR: ..." instead of raising
+# (never-raise contract for MCP tool handlers).
+_GITHUB_ERRORS = (GithubException, requests.RequestException)
+
+
+def _audit_denial(tool: str, issue_number: int, path: str, reason: str) -> None:
+    audit_logger.warning(
+        "policy-denial tool=%s issue=%s path=%r reason=%s", tool, issue_number, path, reason
+    )
 
 
 @dataclass
@@ -37,6 +57,13 @@ class ServerDependencies:
     tracker: AttemptTracker
     github_client: GitHubClient
     workspaces: dict = field(default_factory=dict)
+    test_timeout_seconds: float = DEFAULT_TEST_TIMEOUT_SECONDS
+    # Tool handlers run in worker threads (see build_mcp_app), so workspace
+    # bookkeeping is guarded by this lock; `starting` reserves an issue while
+    # its clone is in flight so two concurrent start_issue calls can't both
+    # clone it.
+    lock: threading.Lock = field(default_factory=threading.Lock)
+    starting: set = field(default_factory=set)
 
 
 def _branch_name(issue_number: int) -> str:
@@ -47,104 +74,130 @@ def _missing_workspace_error(issue_number: int) -> str:
     return f"ERROR: no active workspace for issue {issue_number}; call start_issue first"
 
 
+def _workspace_for(issue_number: int, deps: ServerDependencies) -> str | None:
+    with deps.lock:
+        return deps.workspaces.get(str(issue_number))
+
+
 def handle_start_issue(issue_number: int, deps: ServerDependencies) -> str:
     issue_key = str(issue_number)
-    if issue_key in deps.workspaces:
-        return f"ERROR: issue {issue_number} already has an active workspace"
-    branch_name = _branch_name(issue_number)
+    with deps.lock:
+        if issue_key in deps.workspaces or issue_key in deps.starting:
+            return f"ERROR: issue {issue_number} already has an active workspace"
+        deps.starting.add(issue_key)
     try:
-        workspace_dir = create_workspace(deps.repo_remote)
-    except GitOpsError as exc:
-        return f"ERROR: {exc}"
-    try:
-        # A follow-up invocation (e.g. after review comments) must resume on
-        # the same remote branch instead of branching fresh off main, so a
-        # later push can fast-forward rather than being rejected.
-        if remote_branch_exists(workspace_dir, branch_name):
-            checkout_remote_branch(workspace_dir, branch_name)
-        else:
-            create_branch(workspace_dir, branch_name)
-    except GitOpsError as exc:
-        destroy_workspace(workspace_dir)
-        return f"ERROR: {exc}"
-    deps.workspaces[issue_key] = workspace_dir
-    return branch_name
+        branch_name = _branch_name(issue_number)
+        try:
+            workspace_dir = create_workspace(deps.repo_remote)
+        except (GitOpsError, OSError) as exc:
+            return f"ERROR: {exc}"
+        try:
+            # A follow-up invocation (e.g. after review comments) must resume on
+            # the same remote branch instead of branching fresh off main, so a
+            # later push can fast-forward rather than being rejected.
+            if remote_branch_exists(workspace_dir, branch_name):
+                checkout_remote_branch(workspace_dir, branch_name)
+            else:
+                create_branch(workspace_dir, branch_name)
+        except (GitOpsError, OSError) as exc:
+            destroy_workspace(workspace_dir)
+            return f"ERROR: {exc}"
+        with deps.lock:
+            deps.workspaces[issue_key] = workspace_dir
+        return branch_name
+    finally:
+        with deps.lock:
+            deps.starting.discard(issue_key)
 
 
 def handle_write_file(issue_number: int, relative_path: str, content: str, deps: ServerDependencies) -> str:
     issue_key = str(issue_number)
-    if issue_key not in deps.workspaces:
+    workspace_dir = _workspace_for(issue_number, deps)
+    if workspace_dir is None:
         return _missing_workspace_error(issue_number)
-    workspace_dir = deps.workspaces[issue_key]
     try:
         _write_file(workspace_dir, relative_path, content, deps.manifest, issue_key, deps.tracker)
     except ProtectedPathError as exc:
+        _audit_denial("write_file", issue_number, relative_path, f"REFUSED: {exc}")
         return f"REFUSED: {exc}"
     except AttemptsExhaustedError as exc:
+        _audit_denial("write_file", issue_number, relative_path, f"EXHAUSTED: {exc}")
         try:
             deps.github_client.comment_on_issue(issue_number, f"Giving up: {exc}")
-        except GithubException as comment_exc:
+        except _GITHUB_ERRORS as comment_exc:
             return f"EXHAUSTED: {exc} (failed to comment on issue: {comment_exc})"
         return f"EXHAUSTED: {exc}"
+    except OSError as exc:
+        return f"ERROR: {exc}"
     return "OK"
 
 
 def handle_read_file(issue_number: int, relative_path: str, deps: ServerDependencies) -> str:
-    issue_key = str(issue_number)
-    if issue_key not in deps.workspaces:
+    workspace_dir = _workspace_for(issue_number, deps)
+    if workspace_dir is None:
         return _missing_workspace_error(issue_number)
-    workspace_dir = deps.workspaces[issue_key]
     try:
         return _read_file(workspace_dir, relative_path)
     except ProtectedPathError as exc:
+        _audit_denial("read_file", issue_number, relative_path, f"REFUSED: {exc}")
         return f"REFUSED: {exc}"
     except FileNotFoundError:
         return f"ERROR: file not found: {relative_path}"
-    except IsADirectoryError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         return f"ERROR: {exc}"
 
 
+def _format_test_result(result: subprocess.CompletedProcess) -> str:
+    status = "OK" if result.returncode == 0 else "FAILED"
+    return f"{status} (exit {result.returncode})\n{result.stdout}{result.stderr}"
+
+
 def handle_run_tests(issue_number: int, service_relative_path: str, deps: ServerDependencies) -> str:
-    issue_key = str(issue_number)
-    if issue_key not in deps.workspaces:
+    workspace_dir = _workspace_for(issue_number, deps)
+    if workspace_dir is None:
         return _missing_workspace_error(issue_number)
-    workspace_dir = deps.workspaces[issue_key]
     try:
-        # Validation only: this rejects a service_relative_path that would
-        # escape the workspace. run_local_tests itself always runs with
-        # cwd=workspace_dir, so the original (unresolved) relative path is
-        # what actually gets passed to pytest below.
-        _resolve_inside_workspace(workspace_dir, service_relative_path)
+        # Validation only (option-like, .git, escape). run_local_tests runs
+        # with cwd=workspace_dir and passes the path after "--".
+        validate_test_path(workspace_dir, service_relative_path)
     except ProtectedPathError as exc:
+        _audit_denial("run_tests", issue_number, service_relative_path, f"REFUSED: {exc}")
         return f"REFUSED: {exc}"
-    result = _run_local_tests(workspace_dir, service_relative_path)
-    return result.stdout + result.stderr
+    timeout = deps.test_timeout_seconds
+    try:
+        result = _run_local_tests(workspace_dir, service_relative_path, timeout_seconds=timeout)
+    except subprocess.TimeoutExpired:
+        return f"ERROR: tests timed out after {timeout:g}s"
+    except OSError as exc:
+        return f"ERROR: {exc}"
+    return _format_test_result(result)
 
 
 def handle_submit_pr(issue_number: int, title: str, body: str, deps: ServerDependencies) -> str:
     issue_key = str(issue_number)
-    if issue_key not in deps.workspaces:
+    workspace_dir = _workspace_for(issue_number, deps)
+    if workspace_dir is None:
         return _missing_workspace_error(issue_number)
-    workspace_dir = deps.workspaces[issue_key]
     branch_name = _branch_name(issue_number)
     try:
         commit_all(workspace_dir, title)
         push(workspace_dir, branch_name)
         pr = deps.github_client.open_pr(branch_name, base="main", title=title, body=body)
-    except (GitOpsError, GithubException) as exc:
+    except (GitOpsError, OSError, *_GITHUB_ERRORS) as exc:
         # Keep the workspace (and its deps.workspaces entry) on failure so
         # the agent can fix the problem and retry submit_pr without having
         # to start_issue (and re-clone) again.
         return f"ERROR: {exc}"
     destroy_workspace(workspace_dir)
-    del deps.workspaces[issue_key]
+    with deps.lock:
+        deps.workspaces.pop(issue_key, None)
     return f"opened PR #{pr.number}"
 
 
 def handle_list_assigned_issues(deps: ServerDependencies, label: str = "self-dev") -> str:
     try:
         issues = deps.github_client.list_issues_by_label(label)
-    except GithubException as exc:
+    except _GITHUB_ERRORS as exc:
         return f"ERROR: {exc}"
     if not issues:
         return f"No open issues labeled {label}"
@@ -154,7 +207,7 @@ def handle_list_assigned_issues(deps: ServerDependencies, label: str = "self-dev
 def handle_check_pr_status(pr_number: int, deps: ServerDependencies) -> str:
     try:
         return deps.github_client.get_pr_status(pr_number)
-    except GithubException as exc:
+    except _GITHUB_ERRORS as exc:
         return f"ERROR: {exc}"
 
 
@@ -165,37 +218,42 @@ def build_mcp_app() -> FastMCP:
         manifest=FleetManifest.load("fleet_manifest.yaml"),
         tracker=AttemptTracker(max_attempts=settings.max_attempts),
         github_client=GitHubClient(settings.github_token, settings.github_repo_full_name),
+        test_timeout_seconds=settings.test_timeout_seconds,
     )
 
     app = FastMCP("self-dev-mcp")
 
+    # Every tool is async and runs its blocking (git, pytest, GitHub API)
+    # sync handler in a worker thread, so a long run_tests can never stall
+    # the event loop -- which also serves /health.
+
     @app.tool(name="start_issue")
-    def start_issue(issue_number: int) -> str:
-        return handle_start_issue(issue_number, deps)
+    async def start_issue(issue_number: int) -> str:
+        return await anyio.to_thread.run_sync(handle_start_issue, issue_number, deps)
 
     @app.tool(name="read_file")
-    def read_file(issue_number: int, relative_path: str) -> str:
-        return handle_read_file(issue_number, relative_path, deps)
+    async def read_file(issue_number: int, relative_path: str) -> str:
+        return await anyio.to_thread.run_sync(handle_read_file, issue_number, relative_path, deps)
 
     @app.tool(name="write_file")
-    def write_file(issue_number: int, relative_path: str, content: str) -> str:
-        return handle_write_file(issue_number, relative_path, content, deps)
+    async def write_file(issue_number: int, relative_path: str, content: str) -> str:
+        return await anyio.to_thread.run_sync(handle_write_file, issue_number, relative_path, content, deps)
 
     @app.tool(name="run_tests")
-    def run_tests(issue_number: int, service_relative_path: str) -> str:
-        return handle_run_tests(issue_number, service_relative_path, deps)
+    async def run_tests(issue_number: int, service_relative_path: str) -> str:
+        return await anyio.to_thread.run_sync(handle_run_tests, issue_number, service_relative_path, deps)
 
     @app.tool(name="submit_pr")
-    def submit_pr(issue_number: int, title: str, body: str) -> str:
-        return handle_submit_pr(issue_number, title, body, deps)
+    async def submit_pr(issue_number: int, title: str, body: str) -> str:
+        return await anyio.to_thread.run_sync(handle_submit_pr, issue_number, title, body, deps)
 
     @app.tool(name="list_assigned_issues")
-    def list_assigned_issues(label: str = "self-dev") -> str:
-        return handle_list_assigned_issues(deps, label)
+    async def list_assigned_issues(label: str = "self-dev") -> str:
+        return await anyio.to_thread.run_sync(handle_list_assigned_issues, deps, label)
 
     @app.tool(name="check_pr_status")
-    def check_pr_status(pr_number: int) -> str:
-        return handle_check_pr_status(pr_number, deps)
+    async def check_pr_status(pr_number: int) -> str:
+        return await anyio.to_thread.run_sync(handle_check_pr_status, pr_number, deps)
 
     return app
 
@@ -203,10 +261,10 @@ def build_mcp_app() -> FastMCP:
 def build_http_app() -> Starlette:
     """Build a Starlette ASGI app serving Self-Dev MCP over HTTP, plus /health.
 
-    Every blue/green deploy of this service is health-checked over HTTP
-    (see fleet_manifest.yaml's health_check for self-dev-mcp), so it must be
-    servable as an ASGI app with a /health route rather than only over
-    stdio, which has no health endpoint at all.
+    The compose deployment health-checks this service over HTTP (see the
+    self-dev-mcp healthcheck in docker-compose.yml), so it must be servable
+    as an ASGI app with a /health route rather than only over stdio, which
+    has no health endpoint at all.
 
     mcp==1.2.0's FastMCP has no sse_app()/streamable_http_app() convenience
     method (those were added in later mcp releases) -- only
@@ -262,6 +320,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    # Logs -- including the fleet_mcp.audit policy-denial trail -- go to
+    # stderr: with --transport stdio, stdout is the MCP protocol channel.
+    logging.basicConfig(
+        level=logging.INFO,
+        stream=sys.stderr,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
     args = _parse_args()
     if args.transport == "http":
         import uvicorn

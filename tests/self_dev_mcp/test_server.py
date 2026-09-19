@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import inspect
+import logging
+import subprocess
+import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -197,11 +202,11 @@ def test_handle_run_tests_runs_for_valid_path(tmp_path):
     deps.workspaces["1"] = str(workspace)
 
     with patch("services.self_dev_mcp.server._run_local_tests") as mock_run:
-        mock_run.return_value = MagicMock(stdout="ok", stderr="")
+        mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
         result = handle_run_tests(1, "services/foo", deps)
 
-    mock_run.assert_called_once_with(str(workspace), "services/foo")
-    assert result == "ok"
+    mock_run.assert_called_once_with(str(workspace), "services/foo", timeout_seconds=600.0)
+    assert result == "OK (exit 0)\nok"
 
 
 # --- Ruling 4: duplicate-attempt guard ---
@@ -419,8 +424,10 @@ def test_handle_start_issue_checkout_remote_branch_failure_destroys_workspace(
 # --- Smoke test: build_mcp_app registers exactly the expected tools ---
 
 
-@pytest.mark.asyncio
-async def test_build_mcp_app_registers_all_tools(tmp_path, monkeypatch):
+def test_build_mcp_app_registers_all_tools(tmp_path, monkeypatch):
+    # Deliberately a sync test driving the coroutine with asyncio.run():
+    # an `async def` test silently skips when pytest-asyncio isn't installed
+    # (it isn't in requirements.txt, so it never ran in CI).
     manifest_path = tmp_path / "fleet_manifest.yaml"
     manifest_path.write_text(
         "services:\n"
@@ -430,7 +437,7 @@ async def test_build_mcp_app_registers_all_tools(tmp_path, monkeypatch):
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("SELF_DEV_REPO_REMOTE", "https://example.com/repo.git")
-    monkeypatch.setenv("GITHUB_TOKEN", "fake-token")
+    monkeypatch.setenv("SELF_DEV_GITHUB_TOKEN", "fake-token")
     monkeypatch.setenv("GITHUB_REPO_FULL_NAME", "org/repo")
 
     with patch("services.self_dev_mcp.server.GitHubClient") as mock_github_client:
@@ -439,7 +446,7 @@ async def test_build_mcp_app_registers_all_tools(tmp_path, monkeypatch):
         from services.self_dev_mcp.server import build_mcp_app
 
         app = build_mcp_app()
-        tools = await app.list_tools()
+        tools = asyncio.run(app.list_tools())
 
     tool_names = {tool.name for tool in tools}
     assert tool_names == {
@@ -470,7 +477,7 @@ def _set_server_env(monkeypatch, tmp_path):
     _write_minimal_manifest(tmp_path)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("SELF_DEV_REPO_REMOTE", "https://example.com/repo.git")
-    monkeypatch.setenv("GITHUB_TOKEN", "fake-token")
+    monkeypatch.setenv("SELF_DEV_GITHUB_TOKEN", "fake-token")
     monkeypatch.setenv("GITHUB_REPO_FULL_NAME", "org/repo")
 
 
@@ -535,3 +542,303 @@ def test_fastmcp_still_exposes_private_mcp_server_attribute():
     from mcp.server.fastmcp import FastMCP
 
     assert hasattr(FastMCP("x"), "_mcp_server")
+
+
+# --- Final fix wave: I-6 run_tests hardening ---
+
+
+def _deps_with_workspace(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    deps = _deps(tmp_path)
+    deps.workspaces["1"] = str(workspace)
+    return deps, workspace
+
+
+@pytest.mark.parametrize("bad_path", ["-p", "--basetemp=/app", "-", "--", "-x/services"])
+def test_handle_run_tests_refuses_option_like_path(tmp_path, bad_path):
+    deps, _workspace = _deps_with_workspace(tmp_path)
+
+    with patch("services.self_dev_mcp.server._run_local_tests") as mock_run:
+        result = handle_run_tests(1, bad_path, deps)
+
+    assert result.startswith("REFUSED")
+    mock_run.assert_not_called()
+
+
+def test_handle_run_tests_timeout_returns_error(tmp_path):
+    deps, _workspace = _deps_with_workspace(tmp_path)
+    deps.test_timeout_seconds = 7
+
+    with patch(
+        "services.self_dev_mcp.tools.subprocess.run",
+        side_effect=subprocess.TimeoutExpired(cmd="pytest", timeout=7),
+    ) as mock_run:
+        result = handle_run_tests(1, "services/foo", deps)
+
+    assert result == "ERROR: tests timed out after 7s"
+    assert mock_run.call_args.kwargs["timeout"] == 7
+
+
+def test_handle_run_tests_reports_failed_exit_code(tmp_path):
+    deps, _workspace = _deps_with_workspace(tmp_path)
+
+    with patch("services.self_dev_mcp.server._run_local_tests") as mock_run:
+        mock_run.return_value = MagicMock(returncode=1, stdout="1 failed", stderr="warn")
+        result = handle_run_tests(1, "services/foo", deps)
+
+    assert result == "FAILED (exit 1)\n1 failedwarn"
+
+
+def test_handle_run_tests_passes_path_after_double_dash_and_strips_tokens(tmp_path, monkeypatch):
+    deps, workspace = _deps_with_workspace(tmp_path)
+    monkeypatch.setenv("SELF_DEV_GITHUB_TOKEN", "secret-self-dev")
+
+    with patch("services.self_dev_mcp.tools.subprocess.run") as mock_run:
+        mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        handle_run_tests(1, "services/foo", deps)
+
+    argv = mock_run.call_args.args[0]
+    assert argv == ["python", "-m", "pytest", "--", "services/foo"]
+    assert mock_run.call_args.kwargs["cwd"] == str(workspace)
+    assert "SELF_DEV_GITHUB_TOKEN" not in mock_run.call_args.kwargs["env"]
+
+
+def test_handle_run_tests_oserror_returns_error(tmp_path):
+    deps, _workspace = _deps_with_workspace(tmp_path)
+
+    with patch("services.self_dev_mcp.server._run_local_tests", side_effect=FileNotFoundError("python")):
+        result = handle_run_tests(1, "services/foo", deps)
+
+    assert result.startswith("ERROR")
+
+
+def test_registered_tools_are_coroutine_functions(tmp_path, monkeypatch):
+    _set_server_env(monkeypatch, tmp_path)
+
+    with patch("services.self_dev_mcp.server.GitHubClient") as mock_github_client:
+        mock_github_client.return_value = MagicMock()
+        from services.self_dev_mcp.server import build_mcp_app
+
+        app = build_mcp_app()
+
+    for name in ("run_tests", "start_issue", "submit_pr", "write_file"):
+        tool = app._tool_manager.get_tool(name)
+        assert inspect.iscoroutinefunction(tool.fn), name
+        assert tool.is_async, name
+
+
+def test_async_tool_runs_handler_off_the_event_loop_thread(tmp_path, monkeypatch):
+    _set_server_env(monkeypatch, tmp_path)
+    seen = {}
+
+    def fake_handle_run_tests(issue_number, path, deps):
+        seen["thread"] = threading.get_ident()
+        return "OK (exit 0)\n"
+
+    with patch("services.self_dev_mcp.server.GitHubClient") as mock_github_client:
+        mock_github_client.return_value = MagicMock()
+        from services.self_dev_mcp.server import build_mcp_app
+
+        app = build_mcp_app()
+
+    async def call():
+        seen["loop_thread"] = threading.get_ident()
+        # Call the registered coroutine directly (Tool.run goes through a
+        # pydantic path that emits a DeprecationWarning on newer pydantic).
+        return await app._tool_manager.get_tool("run_tests").fn(issue_number=1, service_relative_path="x")
+
+    with patch("services.self_dev_mcp.server.handle_run_tests", fake_handle_run_tests):
+        result = asyncio.run(call())
+
+    assert result == "OK (exit 0)\n"
+    assert seen["thread"] != seen["loop_thread"]
+
+
+# --- Final fix wave: C-1 .git refused through every tool ---
+
+GIT_PATHS = [".git/config", ".git/hooks/pre-commit", ".GIT/config", "sub/../.git/config", "./.git/x"]
+
+
+@pytest.mark.parametrize("git_path", GIT_PATHS)
+def test_handlers_refuse_git_metadata_paths(tmp_path, git_path):
+    deps, workspace = _deps_with_workspace(tmp_path)
+    (workspace / ".git" / "hooks").mkdir(parents=True)
+    (workspace / ".git" / "config").write_text("[core]\n")
+
+    write_result = handle_write_file(1, git_path, '[remote "origin"]\n', deps)
+    read_result = handle_read_file(1, git_path, deps)
+    with patch("services.self_dev_mcp.server._run_local_tests") as mock_run:
+        tests_result = handle_run_tests(1, git_path, deps)
+
+    assert write_result.startswith("REFUSED"), write_result
+    assert read_result.startswith("REFUSED"), read_result
+    assert tests_result.startswith("REFUSED"), tests_result
+    mock_run.assert_not_called()
+    assert (workspace / ".git" / "config").read_text() == "[core]\n"
+    assert not (workspace / ".git" / "hooks" / "pre-commit").exists()
+    assert not (workspace / ".git" / "x").exists()
+
+
+# --- Final fix wave: I-8 policy-denial audit log ---
+
+
+def _audit_records(caplog):
+    return [r for r in caplog.records if r.name == "fleet_mcp.audit"]
+
+
+def test_audit_log_on_protected_write(tmp_path, caplog):
+    deps, _workspace = _deps_with_workspace(tmp_path)
+
+    with caplog.at_level(logging.WARNING, logger="fleet_mcp.audit"):
+        handle_write_file(1, "services/deploy_watcher/x.py", "SECRET-CONTENT", deps)
+
+    records = _audit_records(caplog)
+    assert len(records) == 1
+    message = records[0].getMessage()
+    assert records[0].levelno == logging.WARNING
+    assert message.startswith(
+        "policy-denial tool=write_file issue=1 path='services/deploy_watcher/x.py' reason=REFUSED"
+    )
+    assert "SECRET-CONTENT" not in message
+
+
+def test_audit_log_on_git_write(tmp_path, caplog):
+    deps, _workspace = _deps_with_workspace(tmp_path)
+
+    with caplog.at_level(logging.WARNING, logger="fleet_mcp.audit"):
+        handle_write_file(1, ".git/config", "[remote]", deps)
+
+    records = _audit_records(caplog)
+    assert len(records) == 1
+    assert "path='.git/config'" in records[0].getMessage()
+    assert "git metadata" in records[0].getMessage()
+
+
+def test_audit_log_on_escape_uses_repr_of_path(tmp_path, caplog):
+    deps, _workspace = _deps_with_workspace(tmp_path)
+    newline_path = "../esc" + chr(10) + "ape.py"
+
+    with caplog.at_level(logging.WARNING, logger="fleet_mcp.audit"):
+        handle_write_file(1, newline_path, "x", deps)
+        handle_read_file(1, "../escape.py", deps)
+        handle_run_tests(1, "../escape", deps)
+
+    records = _audit_records(caplog)
+    assert [r.args[0] for r in records] == ["write_file", "read_file", "run_tests"]
+    # %r keeps a newline in an attacker-chosen path from forging a log line.
+    assert chr(10) not in records[0].getMessage()
+    assert repr(newline_path) in records[0].getMessage()
+
+
+def test_audit_log_on_exhausted(tmp_path, caplog):
+    deps, _workspace = _deps_with_workspace(tmp_path)
+    deps.tracker = AttemptTracker(max_attempts=1)
+    handle_write_file(1, "a.py", "1", deps)
+
+    with caplog.at_level(logging.WARNING, logger="fleet_mcp.audit"):
+        handle_write_file(1, "b.py", "2", deps)
+
+    records = _audit_records(caplog)
+    assert len(records) == 1
+    assert "reason=EXHAUSTED" in records[0].getMessage()
+
+
+# --- Final fix wave: M-2 never-raise gaps ---
+
+
+def test_handle_read_file_non_utf8_returns_error(tmp_path):
+    deps, workspace = _deps_with_workspace(tmp_path)
+    (workspace / "bin.dat").write_bytes(b"\xff\xfe\x00bad")
+
+    assert handle_read_file(1, "bin.dat", deps).startswith("ERROR")
+
+
+def test_handle_read_file_directory_returns_error(tmp_path):
+    deps, workspace = _deps_with_workspace(tmp_path)
+    (workspace / "adir").mkdir()
+
+    assert handle_read_file(1, "adir", deps).startswith("ERROR")
+
+
+def test_handle_write_file_oserror_returns_error(tmp_path):
+    deps, _workspace = _deps_with_workspace(tmp_path)
+
+    with patch("services.self_dev_mcp.server._write_file", side_effect=PermissionError("denied")):
+        assert handle_write_file(1, "a.py", "x", deps) == "ERROR: denied"
+
+
+@pytest.mark.parametrize("method", ["list_issues_by_label", "get_pr_status"])
+def test_github_network_errors_return_error(tmp_path, method):
+    import requests
+
+    deps = _deps(tmp_path)
+    getattr(deps.github_client, method).side_effect = requests.ConnectionError("down")
+
+    if method == "list_issues_by_label":
+        result = handle_list_assigned_issues(deps)
+    else:
+        result = handle_check_pr_status(1, deps)
+
+    assert result.startswith("ERROR")
+
+
+@patch("services.self_dev_mcp.server.push")
+@patch("services.self_dev_mcp.server.commit_all")
+def test_handle_submit_pr_network_error_returns_error_and_keeps_workspace(mock_commit_all, mock_push, tmp_path):
+    import requests
+
+    deps, workspace = _deps_with_workspace(tmp_path)
+    deps.github_client.open_pr.side_effect = requests.ConnectionError("down")
+
+    assert handle_submit_pr(1, "t", "b", deps).startswith("ERROR")
+    assert deps.workspaces["1"] == str(workspace)
+
+
+def test_handle_write_file_exhausted_comment_network_error(tmp_path):
+    import requests
+
+    deps, _workspace = _deps_with_workspace(tmp_path)
+    deps.tracker = AttemptTracker(max_attempts=1)
+    deps.github_client.comment_on_issue.side_effect = requests.ConnectionError("down")
+    handle_write_file(1, "a.py", "1", deps)
+
+    result = handle_write_file(1, "b.py", "2", deps)
+
+    assert result.startswith("EXHAUSTED") and "failed to comment" in result
+
+
+@patch("services.self_dev_mcp.server.create_workspace", side_effect=OSError("disk full"))
+def test_handle_start_issue_oserror_returns_error(mock_create_workspace, tmp_path):
+    deps = _deps(tmp_path)
+
+    assert handle_start_issue(1, deps) == "ERROR: disk full"
+    assert "1" not in deps.workspaces and "1" not in deps.starting
+
+
+def test_handle_start_issue_concurrent_calls_clone_once(tmp_path):
+    deps = _deps(tmp_path)
+    release = threading.Event()
+    entered = threading.Event()
+    clone_calls = []
+
+    def slow_create_workspace(remote):
+        clone_calls.append(remote)
+        entered.set()
+        release.wait(5)
+        return str(tmp_path / "ws")
+
+    with patch("services.self_dev_mcp.server.create_workspace", side_effect=slow_create_workspace), patch(
+        "services.self_dev_mcp.server.remote_branch_exists", return_value=False
+    ), patch("services.self_dev_mcp.server.create_branch"):
+        results = []
+        worker = threading.Thread(target=lambda: results.append(handle_start_issue(1, deps)))
+        worker.start()
+        assert entered.wait(5)
+        second = handle_start_issue(1, deps)
+        release.set()
+        worker.join(5)
+
+    assert second == "ERROR: issue 1 already has an active workspace"
+    assert results == ["selfdev/issue-1"]
+    assert len(clone_calls) == 1

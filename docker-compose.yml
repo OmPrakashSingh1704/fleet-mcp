@@ -13,6 +13,7 @@ services:
       context: .
       dockerfile: services/fixture_hello_mcp/Dockerfile
     image: fixture-hello-mcp
+    restart: unless-stopped
     networks:
       - mcp-fleet
     ports:
@@ -31,6 +32,7 @@ services:
       context: .
       dockerfile: services/self_dev_mcp/Dockerfile
     image: self-dev-mcp
+    restart: unless-stopped
     networks:
       - mcp-fleet
     ports:
@@ -38,15 +40,20 @@ services:
       # authentication of its own, so this must not be reachable from
       # outside this host by default -- see SECURITY.md#known-limitations.
       - "127.0.0.1:8082:8080"
+    # Compose-managed only: fleet_manifest.yaml gives self-dev-mcp no
+    # `container`, so the deploy watcher never redeploys it. Update it with
+    # `docker compose up --build self-dev-mcp`.
     environment:
       SELF_DEV_REPO_REMOTE: ${SELF_DEV_REPO_REMOTE}
-      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      SELF_DEV_GITHUB_TOKEN: ${SELF_DEV_GITHUB_TOKEN}
       GITHUB_REPO_FULL_NAME: ${GITHUB_REPO_FULL_NAME}
+      SELF_DEV_TEST_TIMEOUT_SECONDS: ${SELF_DEV_TEST_TIMEOUT_SECONDS:-600}
     # Deliberately no docker.sock mount, no REPO_REMOTE (that's the
-    # watcher's variable, for the fleet repo it deploys), and no deploy
-    # credentials here -- this service must never gain build/deploy
-    # authority over the fleet. It only ever touches its own repo checkout
-    # via SELF_DEV_REPO_REMOTE + GITHUB_TOKEN for git/PR operations.
+    # watcher's variable, for the fleet repo it deploys), no
+    # WATCHER_GITHUB_TOKEN, and no deploy credentials here -- this service
+    # must never gain build/deploy authority over the fleet. It only ever
+    # touches its own repo checkout via SELF_DEV_REPO_REMOTE +
+    # SELF_DEV_GITHUB_TOKEN (GitHub API, and git via a credential helper).
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
       interval: 10s
@@ -59,11 +66,13 @@ services:
       context: .
       dockerfile: services/deploy_watcher/Dockerfile
     image: deploy-watcher
+    restart: unless-stopped
     networks:
       - mcp-fleet
     environment:
       REPO_REMOTE: ${REPO_REMOTE}
-      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      # Read-only token (contents: read): polling + checkout only.
+      WATCHER_GITHUB_TOKEN: ${WATCHER_GITHUB_TOKEN}
       GITHUB_REPO_FULL_NAME: ${GITHUB_REPO_FULL_NAME}
       CHECKOUT_DIR: /data/checkout
       REGISTRY_PATH: /data/service_registry.json
