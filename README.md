@@ -29,6 +29,93 @@ blue/green deploy and rollback machinery. It is real, tested code, not a
 prototype — see [Status](#status--roadmap) below for exactly what's built and
 what isn't yet.
 
+## Install
+
+Self-Dev MCP only:
+
+```bash
+pip install fleetmcp
+```
+
+Self-Dev MCP plus the Deploy Watcher (needs the Docker SDK):
+
+```bash
+pip install "fleetmcp[watcher]"
+```
+
+Or run it without installing anything, via [uvx](https://docs.astral.sh/uv/guides/tools/):
+
+```bash
+uvx fleetmcp
+```
+
+This installs three console scripts:
+
+- `fleetmcp` and `fleetmcp-self-dev` (identical — two names for the same
+  entry point) — the Self-Dev MCP server: `fleetmcp-self-dev --transport
+  stdio|http` (default `stdio`; `--transport http` serves `/health` on port
+  8080 for container health checks); `--version` prints the installed
+  version.
+- `fleetmcp-watcher` — the Deploy Watcher. Needs
+  `pip install "fleetmcp[watcher]"`; without the `docker` package installed,
+  it prints `fleetmcp-watcher needs the Docker SDK. Install it with: pip
+  install "fleetmcp[watcher]"` and exits rather than crashing with an import
+  traceback.
+
+Self-Dev MCP reads its configuration from environment variables (see
+[.env.example](.env.example) and
+[fleetmcp/self_dev_mcp/config.py](fleetmcp/self_dev_mcp/config.py)):
+
+| Variable | Required | Meaning |
+|---|---|---|
+| `SELF_DEV_GITHUB_TOKEN` | yes | fine-grained token (or bot token): contents, pull requests, and issues read/write on the target repo |
+| `GITHUB_REPO_FULL_NAME` | yes | `owner/repo` |
+| `SELF_DEV_REPO_REMOTE` | yes | git remote URL used for the clone/branch/commit/push workflow |
+| `FLEET_MANIFEST_PATH` | no (default `fleet_manifest.yaml`) | path to the fleet manifest |
+| `SELF_DEV_MAX_ATTEMPTS` | no (default `5`) | per-issue write attempt cap |
+| `SELF_DEV_TEST_TIMEOUT_SECONDS` | no (default `600`) | `run_tests` timeout, in seconds |
+
+Read
+[SECURITY.md#preconditions-before-pointing-a-live-agent-at-a-repo](SECURITY.md#preconditions-before-pointing-a-live-agent-at-a-repo)
+before pointing this at a repository you care about.
+
+## Use with an MCP client
+
+Both snippets below point `uvx` at the `fleetmcp` PyPI package and pass
+configuration through environment variables — see
+[SECURITY.md#preconditions-before-pointing-a-live-agent-at-a-repo](SECURITY.md#preconditions-before-pointing-a-live-agent-at-a-repo)
+first.
+
+### Claude Desktop
+
+Add to your Claude Desktop config (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "fleetmcp": {
+      "command": "uvx",
+      "args": ["fleetmcp"],
+      "env": {
+        "SELF_DEV_GITHUB_TOKEN": "<fine-grained token>",
+        "GITHUB_REPO_FULL_NAME": "owner/repo",
+        "SELF_DEV_REPO_REMOTE": "https://github.com/owner/repo.git",
+        "FLEET_MANIFEST_PATH": "/path/to/fleet_manifest.yaml"
+      }
+    }
+  }
+}
+```
+
+### Claude Code
+
+The `claude` CLI wasn't available in the environment this doc was written
+in, so its exact `claude mcp add ... -e KEY=VALUE` flag syntax couldn't be
+verified against a real `claude mcp add --help`; run that yourself before
+scripting the command form. The JSON form above is not client-specific —
+paste the same `mcpServers` block into whatever configuration surface your
+`claude` CLI version reads for MCP servers.
+
 ## Why Fleet MCP
 
 Most "self-modifying agent" demos either can't touch production or can touch
@@ -63,12 +150,13 @@ are in place.
 
 **Implemented today:**
 
-- **Protected-core enforcement** (`services/common/manifest.py`): a fleet
+- **Protected-core enforcement** (`fleetmcp/common/manifest.py`): a fleet
   manifest defines which services and paths are off-limits. A hardcoded
   core is protected no matter what the manifest says: the manifest, its
-  loader, `services/__init__.py`, `requirements.txt`, `docker-compose.yml`,
-  `pyproject.toml`, `.gitattributes`, `.gitignore`, and the whole
-  `services/common/` and `.github/` trees. Path checks canonicalize
+  loader, `fleetmcp/__init__.py`, `requirements.txt`,
+  `requirements-dev.txt`, `docker-compose.yml`, `pyproject.toml`,
+  `.gitattributes`, `.gitignore`, and the whole `fleetmcp/common/` and
+  `.github/` trees. Path checks canonicalize
   separators, `..` segments, NTFS aliases and case, and are applied to the
   symlink-resolved target too.
 - **Self-Dev MCP server**: a [FastMCP](https://github.com/modelcontextprotocol/python-sdk)
@@ -169,10 +257,11 @@ A small set of things can never be edited by the Self-Dev MCP, no matter
 what an agent's reasoning concludes it should do:
 
 - The **fleet manifest** (`fleet_manifest.yaml`), the **manifest loader**
-  (`services/common/manifest.py`) and everything else in `services/common/`,
-  plus the build/dependency files (`services/__init__.py`,
-  `requirements.txt`, `docker-compose.yml`, `pyproject.toml`,
-  `.gitattributes`, `.gitignore`) and CI/CODEOWNERS (`.github/`). These are
+  (`fleetmcp/common/manifest.py`) and everything else in `fleetmcp/common/`,
+  plus the build/dependency files (`fleetmcp/__init__.py`,
+  `requirements.txt`, `requirements-dev.txt`, `docker-compose.yml`,
+  `pyproject.toml`, `.gitattributes`, `.gitignore`) and CI/CODEOWNERS
+  (`.github/`). These are
   hardcoded-protected, so `write_file` refuses them even if the manifest
   were rewritten to claim they're safe.
 - **Git metadata** (`.git/`): no tool can read or write it, and every git
@@ -229,9 +318,13 @@ authored by the owner, and a sole owner can't approve their own PR under
 git clone https://github.com/OmPrakashSingh1704/fleet-mcp.git
 cd fleet-mcp
 python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate on Windows
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 python -m pytest tests -m "not docker" -v -W error::DeprecationWarning -W error::pytest.PytestUnhandledCoroutineWarning
 ```
+
+`requirements-dev.txt` pulls in `requirements.txt` plus the packaging tools
+(`build`, `twine`, `hatchling`, `hatch-fancy-pypi-readme`) that
+`tests/test_packaging.py` needs to build a wheel as part of the suite.
 
 (`-m docker` runs the Docker integration test separately; it needs a
 reachable Docker daemon.)
@@ -287,7 +380,7 @@ return an `"ERROR: ..."` string until `SELF_DEV_GITHUB_TOKEN` and
 ## Repo layout
 
 ```
-services/
+fleetmcp/
   common/manifest.py        fleet manifest loader + protected-path engine
   self_dev_mcp/              Self-Dev MCP: git ops, workspace, tools, server,
                                 Dockerfile
@@ -296,7 +389,7 @@ services/
                                 Dockerfile, entrypoint.sh
   fixture_hello_mcp/          fixture Flask service + Dockerfile, used as the
                                 Deploy Watcher's local smoke-test target
-tests/                      unit tests, mirroring the services/ layout
+tests/                      unit tests, mirroring the fleetmcp/ layout
 docs/design/                design documents (historical / planned; code and
                               ARCHITECTURE.md are authoritative)
 fleet_manifest.yaml         the fleet manifest (protected)
@@ -341,6 +434,8 @@ verification pass.
 - [GOVERNANCE.md](GOVERNANCE.md) — maintainers and decision-making
 - [SUPPORT.md](SUPPORT.md) — where to ask for help
 - [CHANGELOG.md](CHANGELOG.md)
+- [RELEASING.md](RELEASING.md) — how a `fleetmcp` release is cut and
+  published to PyPI
 
 ## License
 

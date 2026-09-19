@@ -13,9 +13,13 @@ Requirements: Python 3.11+.
 git clone https://github.com/OmPrakashSingh1704/fleet-mcp.git
 cd fleet-mcp
 python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate on Windows
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 python -m pytest tests -m "not docker" -v -W error::DeprecationWarning -W error::pytest.PytestUnhandledCoroutineWarning
 ```
+
+`requirements-dev.txt` pulls in `requirements.txt` plus the packaging tools
+(`build`, `twine`, `hatchling`, `hatch-fancy-pypi-readme`) that
+`tests/test_packaging.py` needs to build a wheel as part of the suite.
 
 Both `-W error` flags are intentional and match CI.
 `error::DeprecationWarning` keeps the codebase free of deprecation noise.
@@ -56,8 +60,8 @@ follow the same shape: a failing test that demonstrates the bug or the new
 behavior, then the minimal implementation that makes it pass. This isn't
 bureaucracy — for the protected-path and rollback logic specifically, the
 test *is* the security control. A PR that changes behavior in
-`services/common/manifest.py`, `services/self_dev_mcp/tools.py`, or
-`services/deploy_watcher/deploy_manager.py` without a corresponding test
+`fleetmcp/common/manifest.py`, `fleetmcp/self_dev_mcp/tools.py`, or
+`fleetmcp/deploy_watcher/deploy_manager.py` without a corresponding test
 change will get sent back, no matter how obviously correct the diff looks.
 
 Run the full suite before pushing:
@@ -81,9 +85,10 @@ The protected core described in [ARCHITECTURE.md](ARCHITECTURE.md) and
 [SECURITY.md](SECURITY.md) is:
 
 - the exact files in `ALWAYS_PROTECTED_PATHS`: `fleet_manifest.yaml`,
-  `services/common/manifest.py`, `services/__init__.py`, `requirements.txt`,
-  `docker-compose.yml`, `pyproject.toml`, `.gitattributes`, `.gitignore`;
-- the subtrees in `ALWAYS_PROTECTED_PREFIXES`: `services/common/` and
+  `fleetmcp/common/manifest.py`, `fleetmcp/__init__.py`, `requirements.txt`,
+  `requirements-dev.txt`, `docker-compose.yml`, `pyproject.toml`,
+  `.gitattributes`, `.gitignore`;
+- the subtrees in `ALWAYS_PROTECTED_PREFIXES`: `fleetmcp/common/` and
   `.github/`;
 - every service marked `protected: true` in the manifest (currently
   `deploy-watcher`; `permission-manager` and `mcp-gateway` once they exist).
@@ -195,13 +200,13 @@ your comments land on the branch that gets the fix.
 
 ## Adding a new fleet service
 
-1. Create `services/<your_service>/` with your service's code and its own
+1. Create `fleetmcp/<your_service>/` with your service's code and its own
    `tests/<your_service>/` mirror.
 2. Add an entry to `fleet_manifest.yaml`:
    ```yaml
    services:
      your-service:
-       path: services/your_service
+       path: fleetmcp/your_service
        protected: false
        container: your-service
        health_check: http://your-service:8080/health
@@ -215,14 +220,21 @@ your comments land on the branch that gets the fix.
    starts. `health_check` is informational only: the watcher always probes
    `http://<service>-<sha>:8080/health` on the `mcp-fleet` network, so the
    service must listen on port 8080.
-3. Add a `Dockerfile` for the service under `services/<your_service>/` (repo
+3. Add a `Dockerfile` for the service under `fleetmcp/<your_service>/` (repo
    root as build context, per the pattern the Deploy Watcher expects — see
-   `services/deploy_watcher/image_builder.py`).
+   `fleetmcp/deploy_watcher/image_builder.py`).
 4. Expose a `/health` endpoint that returns HTTP 200 when the service is
    actually ready to serve traffic — the Deploy Watcher's blue/green swap
    depends on this being accurate, not just "the process is up."
 5. Write tests before implementation, following the pattern in
    `tests/self_dev_mcp/` or `tests/deploy_watcher/`.
+
+## Cutting a release
+
+Releases (the `fleetmcp` PyPI package and its console scripts) are cut by a
+maintainer following [RELEASING.md](RELEASING.md) — version bump, changelog,
+tag, and the Trusted Publishing workflow. Contributors outside that process
+don't need it; it's documented for maintainers only.
 
 ## Contributor License stance
 

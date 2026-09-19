@@ -19,32 +19,32 @@ minor versions).
   `<picture>` element based on `prefers-color-scheme`).
 - Project metadata in `pyproject.toml` (package name `fleet-mcp`,
   description, license, readme).
-- `services/fixture_hello_mcp/`: a minimal Flask service (`GET /health`,
+- `fleetmcp/fixture_hello_mcp/`: a minimal Flask service (`GET /health`,
   `GET /`) used as the Deploy Watcher's local build/run/health-check smoke
   test target.
-- Per-service Dockerfiles (`services/fixture_hello_mcp/Dockerfile`,
-  `services/self_dev_mcp/Dockerfile`, `services/deploy_watcher/Dockerfile`),
+- Per-service Dockerfiles (`fleetmcp/fixture_hello_mcp/Dockerfile`,
+  `fleetmcp/self_dev_mcp/Dockerfile`, `fleetmcp/deploy_watcher/Dockerfile`),
   `docker-compose.yml` (the `mcp-fleet` network plus all three services),
   and a committed `.env.example` template for the secrets `docker-compose.yml`
   reads via `${VAR}` interpolation from a gitignored `.env`.
 - Self-Dev MCP `--transport {stdio,http}` (default `stdio`): `http` serves
   the server over SSE (`/sse`, `/messages/`) plus `GET /health` on port
   8080, so its container can be health-checked.
-- `services/deploy_watcher/entrypoint.sh`: a runtime entrypoint that starts
+- `fleetmcp/deploy_watcher/entrypoint.sh`: a runtime entrypoint that starts
   the watcher container as root, joins its non-root `watcher` user to
   whatever group actually owns the host's `/var/run/docker.sock` (its GID
   varies by host and isn't known at image build time), and then drops to
   `watcher` via `setpriv` before running the real command.
-- `services/self_dev_mcp/github_client.py`: `GitHubClient` now resolves the
+- `fleetmcp/self_dev_mcp/github_client.py`: `GitHubClient` now resolves the
   GitHub repo lazily, on first use, instead of in `__init__` — a bad or
   unreachable `GITHUB_TOKEN` no longer crashes the process at startup
   (previously this made Self-Dev MCP's HTTP server fail to bind before
   `/health` could ever respond); it now surfaces as an `"ERROR: ..."` string
   from the first tool call that needs GitHub.
 - `.github/CODEOWNERS`, covering the protected core
-  (`fleet_manifest.yaml`, `services/common/manifest.py`,
-  `services/deploy_watcher/`, the planned `services/permission_manager/`
-  and `services/mcp_gateway/` directories, `/.github/`, and `SECURITY.md`)
+  (`fleet_manifest.yaml`, `fleetmcp/common/manifest.py`,
+  `fleetmcp/deploy_watcher/`, the planned `fleetmcp/permission_manager/`
+  and `fleetmcp/mcp_gateway/` directories, `/.github/`, and `SECURITY.md`)
   with a placeholder `@OWNER` — GitHub will flag these entries as invalid,
   and code-owner review cannot be enforced, until `@OWNER` is replaced.
 - `.github/workflows/test.yml`: the CI workflow (job id `test`, so the
@@ -68,6 +68,28 @@ minor versions).
   `policy-denial tool=… issue=… path=<repr> reason=…`. Content is never
   logged.
 - `restart: unless-stopped` on every compose service.
+- PyPI packaging: the `fleetmcp` distribution, built with hatchling, with
+  console scripts `fleetmcp` and `fleetmcp-self-dev` (both
+  `fleetmcp.self_dev_mcp.server:main`) and `fleetmcp-watcher`
+  (`fleetmcp.deploy_watcher.cli:main`, requiring the optional `[watcher]`
+  extra for its Docker SDK dependency).
+- `FLEET_MANIFEST_PATH`: overrides where the Self-Dev MCP server looks for
+  the fleet manifest (default `fleet_manifest.yaml`).
+- `requirements-dev.txt`, pinning the packaging toolchain (`build`,
+  `twine`, `hatchling`, `hatch-fancy-pypi-readme`) used to build and check
+  the release artifacts.
+- `.github/workflows/release.yml`: a tag-triggered (`v*.*.*`) release
+  pipeline — verify, build (`python -m build` plus a strict `twine check`
+  and a wheel smoke-install), then publish to TestPyPI and PyPI via
+  [Trusted Publishing](https://docs.pypi.org/trusted-publishers/) (no
+  stored API tokens), then a GitHub release — with the `pypi` environment
+  gated on a required human reviewer.
+- `RELEASING.md`: the release procedure, one-time Trusted Publisher and
+  GitHub environment setup, and failure recovery.
+- CI build/twine check: `python -m build --outdir dist .` and
+  `twine check --strict dist/*` run as part of the release workflow's
+  `build` job, so a metadata problem is caught before anything is
+  published.
 
 ### Security
 
@@ -83,12 +105,12 @@ minor versions).
   `refs/heads/selfdev/issue-N:refs/heads/selfdev/issue-N`. A tampered
   `.git/config` can no longer move `main` or run a hook.
 - Symlink/junction bypass closed: `write_file` re-checks the manifest
-  against the symlink-resolved target, so `innocent -> services/deploy_watcher`
+  against the symlink-resolved target, so `innocent -> fleetmcp/deploy_watcher`
   can't be used to write a protected file.
 - Protected core expanded: `ALWAYS_PROTECTED_PATHS` adds
-  `services/__init__.py`, `requirements.txt`, `docker-compose.yml`,
+  `fleetmcp/__init__.py`, `requirements.txt`, `docker-compose.yml`,
   `pyproject.toml`, `.gitattributes` and `.gitignore`. A new
-  `ALWAYS_PROTECTED_PREFIXES` protects `services/common/` and `.github/`.
+  `ALWAYS_PROTECTED_PREFIXES` protects `fleetmcp/common/` and `.github/`.
   Path canonicalization also strips NTFS stream suffixes and trailing
   dots/spaces. CODEOWNERS mirrors the list, and a test enforces that.
 - Git authentication for private repos goes through a credential helper
@@ -113,6 +135,9 @@ minor versions).
 
 ### Changed
 
+- Renamed the top-level Python package from `services` to `fleetmcp`
+  (import paths, Dockerfiles, manifest paths and protected-core paths
+  updated).
 - **Breaking (env rename, token split):** the shared `GITHUB_TOKEN` is
   gone. Self-Dev MCP reads `SELF_DEV_GITHUB_TOKEN` (fine-grained: contents,
   pull requests and issues read/write) for both the GitHub API and git. The
@@ -156,13 +181,13 @@ self-patching capability tiers described in the design spec; self-extending
 
 ### Added
 
-- `services/common/manifest.py`: `FleetManifest`, the fleet manifest loader
+- `fleetmcp/common/manifest.py`: `FleetManifest`, the fleet manifest loader
   and protected-path engine. `fleet_manifest.yaml` and the manifest loader
   itself are protected unconditionally, independent of manifest content.
   Path checks canonicalize separators, resolve `..` segments, and
   case-fold; a path that escapes the repo root after normalization is
   always treated as protected.
-- `services/self_dev_mcp/`: the Self-Dev MCP server (FastMCP), exposing
+- `fleetmcp/self_dev_mcp/`: the Self-Dev MCP server (FastMCP), exposing
   `start_issue`, `read_file`, `write_file`, `run_tests`, `submit_pr`,
   `list_assigned_issues`, and `check_pr_status`.
   - Writes and reads are confined to an ephemeral per-issue workspace;
@@ -179,7 +204,7 @@ self-patching capability tiers described in the design spec; self-extending
     requests.
   - No Docker socket access, no deploy credentials, no ability to merge a
     pull request.
-- `services/deploy_watcher/`: the Deploy Watcher.
+- `fleetmcp/deploy_watcher/`: the Deploy Watcher.
   - Polls `main` for new commits, syncs a git checkout of the new commit
     (redacting the remote URL, which may embed a token, from any error),
     and builds each non-protected service's image from that checkout
