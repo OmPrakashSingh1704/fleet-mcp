@@ -1,8 +1,12 @@
 [project]
-name = "generalist-mcp"
+name = "fleet-mcp"
 version = "0.1.0"
+description = "A self-developing fleet of MCP servers, with guardrails."
+readme = "README.md"
+license = { text = "Apache-2.0" }
 requires-python = ">=3.11"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"
