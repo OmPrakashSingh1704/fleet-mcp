@@ -18,10 +18,13 @@ def test_version_is_semver():
 @pytest.fixture(scope="module")
 def wheel(tmp_path_factory):
     out = tmp_path_factory.mktemp("dist")
-    subprocess.run(
-        [sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", str(out), str(ROOT)],
-        check=True, capture_output=True, text=True,
-    )
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", str(out), str(ROOT)],
+            check=True, capture_output=True, text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        pytest.fail(f"wheel build failed:\n{e.stdout}\n{e.stderr}")
     (whl,) = out.glob("fleetmcp-*.whl")
     return whl
 
