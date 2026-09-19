@@ -1,0 +1,59 @@
+name: New model / provider support
+description: Request support for a new LLM provider or model in model-adapters-mcp.
+title: "[Model support] "
+labels: ["enhancement", "model-adapter"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Never paste an API key, token, or other credential into this
+        issue.** Issues are public. If Fleet MCP needs to exercise the
+        provider's API during development, a maintainer or the future
+        Model Manager / credentials-manager flow will ask for it through a
+        private channel, not a GitHub issue field.
+
+        Note: `model-adapters-mcp` is not built yet (see the
+        [README roadmap](../../blob/main/README.md#status--roadmap)). This
+        request will be tracked until that lands.
+  - type: input
+    id: provider-name
+    attributes:
+      label: Provider name
+      placeholder: e.g. Acme AI
+    validations:
+      required: true
+  - type: input
+    id: api-docs
+    attributes:
+      label: Link to the provider's API documentation
+      placeholder: https://
+    validations:
+      required: true
+  - type: dropdown
+    id: auth-type
+    attributes:
+      label: Authentication type
+      options:
+        - API key (bearer token)
+        - API key (custom header)
+        - OAuth2
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: auth-details
+    attributes:
+      label: Authentication details
+      description: Describe the auth flow/header format in words. Do not include an actual key or token.
+  - type: textarea
+    id: capabilities
+    attributes:
+      label: Capabilities
+      description: Does this provider support streaming? Tool/function calling? Anything the ModelAdapter interface should know about.
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have not included any API key, token, or credential in this issue
+          required: true

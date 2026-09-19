@@ -1,0 +1,32 @@
+# Replace @OWNER with the GitHub user or team that must approve
+# protected-core changes. Until then GitHub will flag these entries as
+# invalid and code-owner review cannot be enforced.
+
+# Protected core (see ARCHITECTURE.md#protected-core-enforcement-layers and
+# SECURITY.md#guarantees). Mirrors services/common/manifest.py:
+# ALWAYS_PROTECTED_PATHS, ALWAYS_PROTECTED_PREFIXES, and every service
+# marked protected: true in fleet_manifest.yaml.
+
+# ALWAYS_PROTECTED_PATHS (exact files)
+/fleet_manifest.yaml             @OWNER
+/services/common/manifest.py     @OWNER
+/services/__init__.py            @OWNER
+/requirements.txt                @OWNER
+/docker-compose.yml              @OWNER
+/pyproject.toml                  @OWNER
+/.gitattributes                  @OWNER
+/.gitignore                      @OWNER
+
+# ALWAYS_PROTECTED_PREFIXES (whole subtrees). /.github/ also covers CI and
+# this CODEOWNERS file -- nobody should be able to weaken required checks or
+# code-owner review without owner sign-off.
+/services/common/                @OWNER
+/.github/                        @OWNER
+
+# Services marked protected: true in fleet_manifest.yaml
+/services/deploy_watcher/        @OWNER
+/services/permission_manager/    @OWNER
+/services/mcp_gateway/           @OWNER
+
+# Security policy.
+/SECURITY.md                     @OWNER
