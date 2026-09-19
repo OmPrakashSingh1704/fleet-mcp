@@ -51,3 +51,22 @@ def test_wheel_metadata(wheel):
                  "fleetmcp-self-dev = fleetmcp.self_dev_mcp.server:main",
                  "fleetmcp-watcher = fleetmcp.deploy_watcher.cli:main"):
         assert line in ep
+
+
+def test_wheel_readme_links_are_absolute(wheel):
+    """hatch-fancy-pypi-readme rewrites README.md's relative links/images to
+    absolute GitHub URLs for the built long description -- pypi.org does not
+    resolve relative links or images against a repository, unlike GitHub.
+    """
+    zf = zipfile.ZipFile(wheel)
+    meta = next(n for n in zf.namelist() if n.endswith(".dist-info/METADATA"))
+    text = zf.read(meta).decode()
+    assert "Description-Content-Type: text/markdown" in text
+    long_description = text.split("\n\n", 1)[1]
+    assert "](SECURITY.md" not in long_description
+    assert "](ARCHITECTURE.md" not in long_description
+    assert 'src="assets/' not in long_description
+    assert (
+        "https://raw.githubusercontent.com/OmPrakashSingh1704/fleet-mcp/main/assets/logo.svg"
+        in long_description
+    )

@@ -1,12 +1,11 @@
 [build-system]
-requires = ["hatchling>=1.25"]
+requires = ["hatchling>=1.25", "hatch-fancy-pypi-readme>=24"]
 build-backend = "hatchling.build"
 
 [project]
 name = "fleetmcp"
-dynamic = ["version"]
+dynamic = ["version", "readme"]
 description = "A self-developing fleet of MCP servers, with guardrails."
-readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.11"
@@ -51,6 +50,31 @@ Security = "https://github.com/OmPrakashSingh1704/fleet-mcp/blob/main/SECURITY.m
 
 [tool.hatch.version]
 path = "fleetmcp/__init__.py"
+
+# README.md keeps relative links so they work on GitHub; pypi.org does not
+# resolve relative links or images against a repository, so this hook
+# rewrites them to absolute GitHub URLs when building the sdist/wheel
+# metadata. Requires the target repository to be public -- see
+# RELEASING.md#prerequisites-one-time.
+[tool.hatch.metadata.hooks.fancy-pypi-readme]
+content-type = "text/markdown"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "README.md"
+
+# Relative markdown links, e.g. "](SECURITY.md#known-limitations)" or
+# "](docs/acceptance-checklist.md)", become absolute GitHub blob links,
+# anchors preserved. Skips absolute URLs ("](https://...)") and in-page
+# anchors ("](#...)").
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '\]\((?!https?://|#)([^)]+)\)'
+replacement = '](https://github.com/OmPrakashSingh1704/fleet-mcp/blob/main/\1)'
+
+# The logo's <picture>/<img> src="assets/..." and srcset="assets/..." become
+# absolute raw.githubusercontent.com URLs.
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '(src|srcset)="assets/'
+replacement = '\1="https://raw.githubusercontent.com/OmPrakashSingh1704/fleet-mcp/main/assets/'
 
 [tool.hatch.build.targets.wheel]
 packages = ["fleetmcp"]
