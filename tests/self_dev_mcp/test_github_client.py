@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 from github import Auth
 from services.self_dev_mcp.github_client import GitHubClient
@@ -64,19 +64,16 @@ def test_comment_on_issue_delegates_to_repo(mock_github_cls):
     mock_issue.create_comment.assert_called_once_with("giving up")
 
 
-@patch("services.self_dev_mcp.github_client.Auth.Token")
 @patch("services.self_dev_mcp.github_client.Github")
-def test_github_client_uses_auth_token(mock_github_cls, mock_auth_token):
+def test_github_client_uses_auth_token(mock_github_cls):
     mock_repo = MagicMock()
     mock_github_cls.return_value.get_repo.return_value = mock_repo
-    mock_token_instance = MagicMock()
-    mock_auth_token.return_value = mock_token_instance
 
-    client = GitHubClient("my-token", "org/repo")
+    client = GitHubClient("token-123", "org/repo")
 
-    # Verify Github was called with auth=Auth.Token(...), not positional token
-    mock_github_cls.assert_called_once_with(auth=mock_token_instance)
-    # Verify Auth.Token was called with the input token
-    mock_auth_token.assert_called_once_with("my-token")
     # Verify Github was NOT called with positional arguments
-    assert mock_github_cls.call_args[0] == ()  # No positional args
+    assert mock_github_cls.call_args.args == ()
+    # Verify Github was called with auth keyword argument
+    auth = mock_github_cls.call_args.kwargs["auth"]
+    assert isinstance(auth, Auth.Token)
+    assert auth.token == "token-123"
