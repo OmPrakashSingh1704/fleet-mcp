@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import subprocess
 import sys
 import threading
@@ -16,6 +17,7 @@ from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 
+from fleetmcp import __version__
 from fleetmcp.common.manifest import FleetManifest
 from fleetmcp.self_dev_mcp.attempt_tracker import AttemptsExhaustedError, AttemptTracker
 from fleetmcp.self_dev_mcp.config import load_settings
@@ -211,11 +213,15 @@ def handle_check_pr_status(pr_number: int, deps: ServerDependencies) -> str:
         return f"ERROR: {exc}"
 
 
+def manifest_path() -> str:
+    return os.environ.get("FLEET_MANIFEST_PATH", "fleet_manifest.yaml")
+
+
 def build_mcp_app() -> FastMCP:
     settings = load_settings()
     deps = ServerDependencies(
         repo_remote=settings.repo_remote,
-        manifest=FleetManifest.load("fleet_manifest.yaml"),
+        manifest=FleetManifest.load(manifest_path()),
         tracker=AttemptTracker(max_attempts=settings.max_attempts),
         github_client=GitHubClient(settings.github_token, settings.github_repo_full_name),
         test_timeout_seconds=settings.test_timeout_seconds,
@@ -316,10 +322,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--host", default="0.0.0.0", help="HTTP bind host (--transport http only)")
     parser.add_argument("--port", type=int, default=8080, help="HTTP bind port (--transport http only)")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return parser.parse_args(argv)
 
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None) -> None:
     # Logs -- including the fleet_mcp.audit policy-denial trail -- go to
     # stderr: with --transport stdio, stdout is the MCP protocol channel.
     logging.basicConfig(
@@ -327,10 +334,14 @@ if __name__ == "__main__":
         stream=sys.stderr,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
-    args = _parse_args()
+    args = _parse_args(argv)
     if args.transport == "http":
         import uvicorn
 
         uvicorn.run(build_http_app(), host=args.host, port=args.port)
     else:
         build_mcp_app().run()
+
+
+if __name__ == "__main__":
+    main()
