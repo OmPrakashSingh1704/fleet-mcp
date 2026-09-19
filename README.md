@@ -266,6 +266,11 @@ Nothing in this table is aspirational marketing — if it says "Built," it has
 passing tests in this repository today. If it says "Planned" or "In
 progress," there is no working code for it yet.
 
+The one thing "Built" doesn't cover automatically: a real run against your
+own GitHub repo (a live PR, CI, and merge). See
+[docs/acceptance-checklist.md](docs/acceptance-checklist.md) for that manual
+verification pass.
+
 ## Documentation
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — components, trust boundaries, the

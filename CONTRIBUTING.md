@@ -57,6 +57,14 @@ Run the full suite before pushing:
 python -m pytest tests -W error::DeprecationWarning
 ```
 
+`tests/integration/` proves the git and Docker mechanics against a real
+local git remote and a real local Docker daemon (skipped automatically if
+Docker isn't available; CI runs with `-m "not docker"`). Before trusting a
+deployment against your own GitHub repo for the first time, also work
+through [docs/acceptance-checklist.md](docs/acceptance-checklist.md), the
+one part of the flow — a real PR, CI, review, and merge — that can't be
+automated.
+
 ## Protected core changes need CODEOWNERS approval
 
 The fleet manifest (`fleet_manifest.yaml`), the manifest loader

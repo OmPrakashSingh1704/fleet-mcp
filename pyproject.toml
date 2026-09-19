@@ -10,3 +10,6 @@ requires-python = ">=3.11"
 pythonpath = ["."]
 testpaths = ["tests"]
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "docker: integration tests that require a real, reachable Docker daemon",
+]
