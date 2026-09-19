@@ -1,28 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="fleetmcp-mark-title fleetmcp-mark-desc">
-  <title id="fleetmcp-mark-title">Fleet MCP</title>
-  <desc id="fleetmcp-mark-desc">A stylized navy cargo ship hull carrying six rounded server containers, each with a small teal status node, sailing over a teal wave line.</desc>
-  <style>
-    .hull { fill: #1B2A4A; }
-    .wave { stroke: #0F9488; }
-    .container { fill: #EDF1F7; stroke: #1B2A4A; stroke-width: 0.6; }
-    .node { fill: #0F9488; }
-    @media (prefers-color-scheme: dark) {
-      .hull { fill: #3E6E8C; }
-      .wave { stroke: #2DD4BF; }
-    }
-  </style>
-  <path class="wave" d="M0,54 Q8,49 16,54 T32,54 T48,54 T64,54" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-  <polygon class="hull" points="6,36 52,36 58,44 50,50 14,50"/>
-  <rect class="container" x="8.0" y="26" width="6.2" height="10" rx="1.4"/>
-  <circle class="node" cx="11.1" cy="29" r="1.1"/>
-  <rect class="container" x="15.2" y="23" width="6.2" height="13" rx="1.4"/>
-  <circle class="node" cx="18.3" cy="26" r="1.1"/>
-  <rect class="container" x="22.4" y="20" width="6.2" height="16" rx="1.4"/>
-  <circle class="node" cx="25.5" cy="23" r="1.1"/>
-  <rect class="container" x="29.6" y="22.5" width="6.2" height="13.5" rx="1.4"/>
-  <circle class="node" cx="32.7" cy="25.5" r="1.1"/>
-  <rect class="container" x="36.8" y="25" width="6.2" height="11" rx="1.4"/>
-  <circle class="node" cx="39.9" cy="28" r="1.1"/>
-  <rect class="container" x="44.0" y="27" width="6.2" height="9" rx="1.4"/>
-  <circle class="node" cx="47.1" cy="30" r="1.1"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="fm-mark-title fm-mark-desc">
+  <title id="fm-mark-title">Fleet MCP</title>
+  <desc id="fm-mark-desc">A cargo ship carrying two tiers of teal server containers over a wave line: a fleet of MCP servers.</desc>
+  <g transform="translate(0,-3)">
+    <g fill="#14B8A6">
+      <rect x="11" y="29" width="9.5" height="8" rx="1.3"/>
+      <rect x="32" y="29" width="9.5" height="8" rx="1.3"/>
+      <rect x="26.75" y="20" width="9.5" height="8" rx="1.3"/>
+    </g>
+    <g fill="#0F766E">
+      <rect x="21.5" y="29" width="9.5" height="8" rx="1.3"/>
+      <rect x="42.5" y="29" width="9.5" height="8" rx="1.3"/>
+      <rect x="16.25" y="20" width="9.5" height="8" rx="1.3"/>
+      <rect x="37.25" y="20" width="9.5" height="8" rx="1.3"/>
+    </g>
+    <g fill="#ECFEFF">
+      <circle cx="13.8" cy="33" r="1.1"/><circle cx="24.3" cy="33" r="1.1"/><circle cx="34.8" cy="33" r="1.1"/><circle cx="45.3" cy="33" r="1.1"/>
+      <circle cx="19.05" cy="24" r="1.1"/><circle cx="29.55" cy="24" r="1.1"/><circle cx="40.05" cy="24" r="1.1"/>
+    </g>
+    <polygon fill="#3E6E8C" points="6,38 58,38 52.5,48 12.5,48"/>
+    <path d="M3,54 Q9,50 15,54 T27,54 T39,54 T51,54 T63,54" fill="none" stroke="#14B8A6" stroke-width="3" stroke-linecap="round"/>
+  </g>
 </svg>
