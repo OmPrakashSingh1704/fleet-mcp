@@ -1,3 +1,6 @@
+import os
+import sys
+
 import pytest
 
 from services.common.manifest import FleetManifest
@@ -167,3 +170,185 @@ def test_refused_path_does_not_consume_attempt(tmp_path):
     tools.write_file(workspace, "legit.txt", "content", manifest, "issue-1", tracker)
 
     assert (workspace / "legit.txt").read_text() == "content"
+
+
+# --- Final fix wave: C-1 .git is never readable/writable through the tools ---
+
+GIT_METADATA_PATHS = [
+    ".git/config",
+    ".git/hooks/pre-commit",
+    ".GIT/config",
+    "sub/../.git/config",
+    "./.git/x",
+    ".git",
+    ".Git/HEAD",
+    "services/.git/config",
+    ".git./config",
+    ".git /config",
+    ".git::$INDEX_ALLOCATION/config",
+    ".git\\config",
+]
+
+
+def _seed_git_dir(workspace):
+    (workspace / ".git" / "hooks").mkdir(parents=True)
+    (workspace / ".git" / "config").write_text("[core]\n")
+
+
+@pytest.mark.parametrize("git_path", GIT_METADATA_PATHS)
+def test_write_file_refuses_git_metadata(tmp_path, git_path):
+    manifest = _manifest_with_protected_deploy_watcher(tmp_path)
+    tracker = AttemptTracker(max_attempts=5)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _seed_git_dir(workspace)
+
+    with pytest.raises(tools.ProtectedPathError):
+        tools.write_file(str(workspace), git_path, "[remote \"origin\"]\n", manifest, "issue-1", tracker)
+
+    assert (workspace / ".git" / "config").read_text() == "[core]\n"
+    assert not (workspace / ".git" / "hooks" / "pre-commit").exists()
+    assert not tracker.is_exhausted("issue-1")
+
+
+@pytest.mark.parametrize("git_path", GIT_METADATA_PATHS)
+def test_read_file_refuses_git_metadata(tmp_path, git_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _seed_git_dir(workspace)
+
+    with pytest.raises(tools.ProtectedPathError):
+        tools.read_file(str(workspace), git_path)
+
+
+@pytest.mark.parametrize("git_path", GIT_METADATA_PATHS)
+def test_validate_test_path_refuses_git_metadata(tmp_path, git_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _seed_git_dir(workspace)
+
+    with pytest.raises(tools.ProtectedPathError):
+        tools.validate_test_path(str(workspace), git_path)
+
+
+@pytest.mark.parametrize("ok_path", [".gitignore_extra", "docs/.github-notes.md", "a.git/x", "git/config"])
+def test_git_like_but_not_git_dir_paths_are_allowed(tmp_path, ok_path):
+    manifest = _manifest_with_protected_deploy_watcher(tmp_path)
+    tracker = AttemptTracker(max_attempts=5)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    tools.write_file(str(workspace), ok_path, "x", manifest, "issue-1", tracker)
+
+    assert (workspace / ok_path).read_text() == "x"
+
+
+def test_validate_test_path_refuses_leading_dash(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    with pytest.raises(tools.ProtectedPathError):
+        tools.validate_test_path(str(workspace), "--basetemp=.")
+
+
+# --- Final fix wave: I-1 symlink / junction bypass ---
+
+
+def _make_dir_link(link_path, target_path) -> str:
+    """Create a directory symlink, or a junction on Windows; skip if neither works."""
+    try:
+        os.symlink(target_path, link_path, target_is_directory=True)
+        return "symlink"
+    except (OSError, NotImplementedError):
+        pass
+    if sys.platform == "win32":
+        try:
+            import _winapi
+
+            _winapi.CreateJunction(str(target_path), str(link_path))
+            return "junction"
+        except OSError:
+            pass
+    pytest.skip("neither symlinks nor junctions can be created here")
+
+
+def test_write_file_refuses_protected_path_reached_through_directory_link(tmp_path):
+    manifest = _manifest_with_protected_deploy_watcher(tmp_path)
+    tracker = AttemptTracker(max_attempts=5)
+    workspace = tmp_path / "workspace"
+    protected_dir = workspace / "services" / "deploy_watcher"
+    protected_dir.mkdir(parents=True)
+    (protected_dir / "main.py").write_text("original\n")
+    _make_dir_link(workspace / "innocent", protected_dir)
+
+    with pytest.raises(tools.ProtectedPathError):
+        tools.write_file(str(workspace), "innocent/main.py", "pwned\n", manifest, "issue-1", tracker)
+
+    assert (protected_dir / "main.py").read_text() == "original\n"
+    assert not tracker.is_exhausted("issue-1")
+
+
+def test_write_file_refuses_git_dir_reached_through_directory_link(tmp_path):
+    manifest = _manifest_with_protected_deploy_watcher(tmp_path)
+    tracker = AttemptTracker(max_attempts=5)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _seed_git_dir(workspace)
+    _make_dir_link(workspace / "notgit", workspace / ".git")
+
+    with pytest.raises(tools.ProtectedPathError):
+        tools.write_file(str(workspace), "notgit/config", "[remote]\n", manifest, "issue-1", tracker)
+    with pytest.raises(tools.ProtectedPathError):
+        tools.read_file(str(workspace), "notgit/config")
+
+    assert (workspace / ".git" / "config").read_text() == "[core]\n"
+
+
+def test_write_file_refuses_always_protected_file_via_file_symlink(tmp_path):
+    manifest = _manifest_with_protected_deploy_watcher(tmp_path)
+    tracker = AttemptTracker(max_attempts=5)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "requirements.txt").write_text("flask\n")
+    try:
+        os.symlink(workspace / "requirements.txt", workspace / "reqs.txt")
+    except (OSError, NotImplementedError):
+        pytest.skip("file symlinks not permitted here")
+
+    with pytest.raises(tools.ProtectedPathError):
+        tools.write_file(str(workspace), "reqs.txt", "evil\n", manifest, "issue-1", tracker)
+
+    assert (workspace / "requirements.txt").read_text() == "flask\n"
+
+
+# --- Final fix wave: I-4 expanded protected core, through write_file ---
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "services/__init__.py",
+        "requirements.txt",
+        "docker-compose.yml",
+        "pyproject.toml",
+        ".gitattributes",
+        ".gitignore",
+        "services/common/new_module.py",
+        "services/common/__init__.py",
+        ".github/workflows/test.yml",
+        ".github/CODEOWNERS",
+        "Requirements.TXT",
+        ".GitHub/workflows/x.yml",
+        "services/Common/x.py",
+    ],
+)
+def test_write_file_refuses_expanded_protected_core(tmp_path, path):
+    manifest = _manifest_with_protected_deploy_watcher(tmp_path)
+    tracker = AttemptTracker(max_attempts=5)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    with pytest.raises(tools.ProtectedPathError):
+        tools.write_file(str(workspace), path, "x", manifest, "issue-1", tracker)
+
+    assert not (workspace / path).exists()

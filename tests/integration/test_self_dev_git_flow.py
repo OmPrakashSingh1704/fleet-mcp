@@ -11,13 +11,22 @@ discovering and checking out an existing remote branch for a second commit.
 
 from __future__ import annotations
 
+import os
 import subprocess
+from unittest.mock import MagicMock
 
 import pytest
 
 from services.common.manifest import FleetManifest
 from services.self_dev_mcp import git_ops
 from services.self_dev_mcp.attempt_tracker import AttemptTracker
+from services.self_dev_mcp.server import (
+    ServerDependencies,
+    handle_read_file,
+    handle_start_issue,
+    handle_submit_pr,
+    handle_write_file,
+)
 from services.self_dev_mcp.tools import ProtectedPathError, write_file
 
 MANIFEST_YAML = (
@@ -186,3 +195,109 @@ def test_followup_checkout_remote_branch_and_second_commit(tmp_path):
 
     parent_sha = _run_git(["rev-parse", f"{second_sha}^"], cwd=verify_dir).stdout.strip()
     assert parent_sha == first_sha
+
+
+# --- Final fix wave: C-1 exploit reproduction against real git ---------------
+
+MALICIOUS_PUSH_CONFIG = (
+    '\n[remote "origin"]\n'
+    "\tpush = +refs/heads/selfdev/issue-1:refs/heads/main\n"
+)
+
+
+def _main_sha(remote_url: str, tmp_path) -> str:
+    out = _run_git(["ls-remote", remote_url, "refs/heads/main"], cwd=tmp_path).stdout
+    return out.split()[0]
+
+
+def _plant_hook(workspace, hook_name: str, marker) -> None:
+    hook = workspace / ".git" / "hooks" / hook_name
+    marker_posix = str(marker).replace("\\", "/")
+    hook.write_text(f"#!/bin/sh\necho pwned > '{marker_posix}'\nexit 0\n", newline="\n")
+    os.chmod(hook, 0o755)
+
+
+def test_c1_exploit_through_tool_handlers_is_refused_and_main_is_unchanged(tmp_path):
+    """The reviewer's C-1 reproduction, driven through the real MCP handlers:
+    start_issue against a local bare remote, write_file('.git/config', <push
+    refmap onto main>), then submit_pr. The write must be REFUSED and main
+    must not move."""
+    remote_url = _init_bare_remote_with_manifest(tmp_path)
+    main_before = _main_sha(remote_url, tmp_path)
+    manifest_path = tmp_path / "fleet_manifest.yaml"
+    manifest_path.write_text(MANIFEST_YAML)
+    github_client = MagicMock()
+    github_client.open_pr.return_value = MagicMock(number=1)
+    deps = ServerDependencies(
+        repo_remote=remote_url,
+        manifest=FleetManifest.load(str(manifest_path)),
+        tracker=AttemptTracker(max_attempts=5),
+        github_client=github_client,
+    )
+
+    assert handle_start_issue(1, deps) == "selfdev/issue-1"
+    workspace_dir = deps.workspaces["1"]
+    config_before = open(os.path.join(workspace_dir, ".git", "config"), encoding="utf-8").read()
+
+    for path in (".git/config", ".GIT/config", "sub/../.git/config", "./.git/config"):
+        result = handle_write_file(1, path, config_before + MALICIOUS_PUSH_CONFIG, deps)
+        assert result.startswith("REFUSED"), (path, result)
+    assert handle_write_file(1, ".git/hooks/pre-push", "#!/bin/sh\ntouch /tmp/x\n", deps).startswith("REFUSED")
+    assert handle_read_file(1, ".git/config", deps).startswith("REFUSED")
+    assert open(os.path.join(workspace_dir, ".git", "config"), encoding="utf-8").read() == config_before
+
+    assert handle_write_file(1, LEGITIMATE_RELATIVE_PATH, "# fix\n", deps) == "OK"
+    assert handle_submit_pr(1, "fix", "body", deps) == "opened PR #1"
+
+    assert _main_sha(remote_url, tmp_path) == main_before
+    branch = _run_git(["ls-remote", remote_url, "refs/heads/selfdev/issue-1"], cwd=tmp_path).stdout
+    assert branch.strip(), "selfdev/issue-1 was not pushed"
+
+
+def test_c1_raw_malicious_config_and_hooks_cannot_move_main_or_run_code(tmp_path):
+    """Defense in depth for any route that bypasses write_file (e.g. code run
+    by run_tests): pre-seed .git/config with a push refmap onto main and an
+    fsmonitor command, and plant executable hooks. commit_all + push must
+    push only refs/heads/selfdev/issue-1, leave main unchanged, and run no
+    hook or fsmonitor."""
+    remote_url = _init_bare_remote_with_manifest(tmp_path)
+    main_before = _main_sha(remote_url, tmp_path)
+
+    workspace = tmp_path / "workspace"
+    git_ops.clone(remote_url, str(workspace))
+    git_ops.create_branch(str(workspace), "selfdev/issue-1")
+
+    hook_markers = {name: tmp_path / f"{name}.marker" for name in ("pre-commit", "pre-push", "post-commit")}
+    for name, marker in hook_markers.items():
+        _plant_hook(workspace, name, marker)
+    fsmonitor_marker = tmp_path / "fsmonitor.marker"
+    fsmonitor_script = tmp_path / "fsmonitor.sh"
+    fsmonitor_script.write_text(
+        f"#!/bin/sh\necho pwned > '{str(fsmonitor_marker).replace(chr(92), '/')}'\n", newline="\n"
+    )
+    os.chmod(fsmonitor_script, 0o755)
+
+    with open(workspace / ".git" / "config", "a", encoding="utf-8") as f:
+        f.write(MALICIOUS_PUSH_CONFIG)
+        f.write(f"[core]\n\tfsmonitor = {str(fsmonitor_script).replace(chr(92), '/')}\n")
+
+    # Control: the planted hook really is runnable by plain git, so the
+    # "marker not created" assertions below are meaningful.
+    control = subprocess.run(
+        ["git", "hook", "run", "pre-commit"], cwd=str(workspace), capture_output=True, text=True
+    )
+    assert control.returncode == 0, control.stderr
+    assert hook_markers["pre-commit"].exists()
+    hook_markers["pre-commit"].unlink()
+
+    (workspace / "services" / "fixture_hello_mcp").mkdir(parents=True, exist_ok=True)
+    (workspace / LEGITIMATE_RELATIVE_PATH).write_text("# fix\n")
+    sha = git_ops.commit_all(str(workspace), "fix")
+    git_ops.push(str(workspace), "selfdev/issue-1")
+
+    assert _main_sha(remote_url, tmp_path) == main_before, "main moved: malicious push refmap was honored"
+    branch_line = _run_git(["ls-remote", remote_url, "refs/heads/selfdev/issue-1"], cwd=tmp_path).stdout
+    assert branch_line.split()[0] == sha
+    for name, marker in hook_markers.items():
+        assert not marker.exists(), f"{name} hook ran"
+    assert not fsmonitor_marker.exists(), "fsmonitor command ran"

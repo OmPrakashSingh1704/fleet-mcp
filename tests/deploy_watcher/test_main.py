@@ -158,3 +158,46 @@ def test_loop_iteration_swallows_unexpected_error_and_does_not_propagate(tmp_pat
 
     mock_run_once.assert_called_once()
     mock_logger.exception.assert_called_once()
+
+
+# --- Final fix wave: I-2 token split ---
+
+
+class _StopLoop(Exception):
+    pass
+
+
+def test_run_uses_watcher_github_token_not_shared_token(monkeypatch):
+    import pytest as _pytest
+
+    from services.deploy_watcher import main as watcher_main
+
+    monkeypatch.setenv("WATCHER_GITHUB_TOKEN", "watcher-token")
+    monkeypatch.setenv("GITHUB_TOKEN", "old-shared-token")
+    monkeypatch.setenv("SELF_DEV_GITHUB_TOKEN", "self-dev-token")
+    monkeypatch.setenv("GITHUB_REPO_FULL_NAME", "org/repo")
+    monkeypatch.setenv("REPO_REMOTE", "https://github.com/org/repo.git")
+
+    with patch.object(watcher_main.docker, "from_env"), patch.object(watcher_main, "ServiceRegistry"), patch.object(
+        watcher_main, "KnownGoodStore"
+    ), patch.object(watcher_main, "DeployManager"), patch.object(
+        watcher_main, "GitHubPoller"
+    ) as mock_poller, patch.object(watcher_main, "_loop_iteration", side_effect=_StopLoop):
+        with _pytest.raises(_StopLoop):
+            watcher_main.run()
+
+    mock_poller.assert_called_once_with("watcher-token", "org/repo")
+
+
+def test_run_requires_watcher_github_token(monkeypatch):
+    import pytest as _pytest
+
+    from services.deploy_watcher import main as watcher_main
+
+    monkeypatch.delenv("WATCHER_GITHUB_TOKEN", raising=False)
+    monkeypatch.setenv("GITHUB_TOKEN", "old-shared-token")
+    monkeypatch.setenv("GITHUB_REPO_FULL_NAME", "org/repo")
+    monkeypatch.setenv("REPO_REMOTE", "https://github.com/org/repo.git")
+
+    with _pytest.raises(KeyError):
+        watcher_main.run()

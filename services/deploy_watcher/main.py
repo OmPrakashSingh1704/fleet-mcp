@@ -104,7 +104,9 @@ def _loop_iteration(
 def run() -> None:
     logging.basicConfig(level=logging.INFO)
 
-    token = os.environ["GITHUB_TOKEN"]
+    # Read-only token (contents: read). git auth for the checkout reads the
+    # same WATCHER_GITHUB_TOKEN via a credential helper -- see checkout.py.
+    token = os.environ["WATCHER_GITHUB_TOKEN"]
     repo_full_name = os.environ["GITHUB_REPO_FULL_NAME"]
     remote_url = os.environ["REPO_REMOTE"]
     checkout_dir = os.environ.get("CHECKOUT_DIR", "/data/checkout")

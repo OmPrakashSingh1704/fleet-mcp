@@ -107,3 +107,128 @@ def test_followup_commit_round_trip_via_checkout_remote_branch(tmp_path):
         ["git", "rev-parse", "HEAD^"], cwd=check_dir, check=True, capture_output=True, text=True
     ).stdout.strip()
     assert parent_sha == first_sha
+
+
+# --- Final fix wave: C-1 (hooks/fsmonitor disabled, explicit refspec) and
+# --- I-2 (credential helper, no token in argv, redaction) ---
+
+import os  # noqa: E402
+from unittest.mock import patch  # noqa: E402
+
+import pytest  # noqa: E402
+
+SECRET = "ghp_SUPERSECRETTOKENVALUE123"
+
+
+def _ok(*args, **kwargs):
+    return subprocess.CompletedProcess(args=args[0], returncode=0, stdout="", stderr="")
+
+
+def _capture_git_calls(monkeypatch, fn):
+    monkeypatch.setenv("SELF_DEV_GITHUB_TOKEN", SECRET)
+    with patch("services.self_dev_mcp.git_ops.subprocess.run", side_effect=_ok) as mock_run:
+        fn()
+    return mock_run.call_args_list
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        lambda: git_ops.clone("https://github.com/org/private.git", "/tmp/ws"),
+        lambda: git_ops.push("/tmp/ws", "selfdev/issue-1"),
+        lambda: git_ops.remote_branch_exists("/tmp/ws", "selfdev/issue-1"),
+        lambda: git_ops.commit_all("/tmp/ws", "msg"),
+    ],
+    ids=["clone", "push", "ls-remote", "commit"],
+)
+def test_every_git_call_carries_safety_config_and_never_the_token(monkeypatch, operation):
+    calls = _capture_git_calls(monkeypatch, operation)
+
+    assert calls
+    for call in calls:
+        argv = call.args[0]
+        joined = " ".join(argv)
+        assert argv[0] == "git"
+        # Hooks and fsmonitor disabled on every invocation.
+        hooks_arg = next(a for a in argv if a.startswith("core.hooksPath="))
+        assert os.path.isdir(hooks_arg.split("=", 1)[1])
+        assert os.listdir(hooks_arg.split("=", 1)[1]) == []
+        assert "core.fsmonitor=false" in argv
+        # Inherited helpers cleared, then our env-reading helper installed.
+        empty_idx = argv.index("credential.helper=")
+        helper_idx = argv.index(f"credential.helper={git_ops.CREDENTIAL_HELPER}")
+        assert empty_idx < helper_idx
+        assert "$SELF_DEV_GITHUB_TOKEN" in git_ops.CREDENTIAL_HELPER
+        # The token VALUE is never in argv; prompts are disabled.
+        assert SECRET not in joined
+        assert call.kwargs["env"]["GIT_TERMINAL_PROMPT"] == "0"
+
+
+def test_push_uses_fully_explicit_non_forcing_refspec(monkeypatch):
+    calls = _capture_git_calls(monkeypatch, lambda: git_ops.push("/tmp/ws", "selfdev/issue-7"))
+
+    argv = calls[0].args[0]
+    assert argv[-4:] == ["push", "-u", "origin", "refs/heads/selfdev/issue-7:refs/heads/selfdev/issue-7"]
+    assert not any(a.startswith("+") for a in argv)
+
+
+def test_git_ops_error_redacts_credentials_remote_and_token(monkeypatch):
+    monkeypatch.setenv("SELF_DEV_GITHUB_TOKEN", SECRET)
+    remote = f"https://user:{SECRET}@github.com/org/private.git"
+    stderr = (
+        f"fatal: unable to access '{remote}/': could not resolve host\n"
+        f"also saw https://someone:hunter2@example.com/x and token {SECRET}"
+    )
+
+    def fail(*args, **kwargs):
+        return subprocess.CompletedProcess(args=args[0], returncode=128, stdout="", stderr=stderr)
+
+    with patch("services.self_dev_mcp.git_ops.subprocess.run", side_effect=fail):
+        with pytest.raises(git_ops.GitOpsError) as exc_info:
+            git_ops.clone(remote, "/tmp/ws")
+
+    message = str(exc_info.value)
+    assert SECRET not in message
+    assert "hunter2" not in message
+    assert "someone:" not in message
+    assert "<remote>" in message
+    assert "https://example.com/x" in message
+    # The helper plumbing is not echoed into errors either.
+    assert "credential.helper" not in message
+
+
+def test_git_ops_error_redacts_configured_remote_on_non_clone_ops(monkeypatch):
+    monkeypatch.setenv("SELF_DEV_REPO_REMOTE", "https://github.com/org/private.git")
+
+    def fail(*args, **kwargs):
+        return subprocess.CompletedProcess(
+            args=args[0], returncode=1, stdout="", stderr="fatal: 'https://github.com/org/private.git' denied"
+        )
+
+    with patch("services.self_dev_mcp.git_ops.subprocess.run", side_effect=fail):
+        with pytest.raises(git_ops.GitOpsError) as exc_info:
+            git_ops.push("/tmp/ws", "selfdev/issue-1")
+
+    assert "org/private" not in str(exc_info.value)
+
+
+def test_real_clone_error_with_embedded_credentials_is_redacted(tmp_path):
+    remote = "https://x-access-token:ghp_REALLOOKINGTOKEN@example.invalid/org/repo.git"
+
+    with pytest.raises(git_ops.GitOpsError) as exc_info:
+        git_ops.clone(remote, str(tmp_path / "ws"))
+
+    assert "ghp_REALLOOKINGTOKEN" not in str(exc_info.value)
+
+
+def test_clone_does_not_persist_token_or_helper_into_git_config(tmp_path, monkeypatch):
+    monkeypatch.setenv("SELF_DEV_GITHUB_TOKEN", SECRET)
+    remote_url = _init_bare_remote(tmp_path)
+    workspace = tmp_path / "workspace"
+
+    git_ops.clone(remote_url, str(workspace))
+
+    config = (workspace / ".git" / "config").read_text()
+    assert SECRET not in config
+    assert "credential" not in config
+    assert "hooksPath" not in config

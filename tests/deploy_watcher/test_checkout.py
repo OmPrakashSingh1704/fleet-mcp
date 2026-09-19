@@ -122,3 +122,52 @@ def test_sync_checkout_rejects_option_shaped_or_malformed_sha_without_invoking_g
             sync_checkout("git@example.invalid:org/repo.git", str(checkout_dir), bad_sha)
 
     mock_run.assert_not_called()
+
+
+# --- Final fix wave: I-2 credential helper + redaction for the watcher ---
+
+WATCHER_SECRET = "ghp_WATCHERSECRETVALUE456"
+
+
+def test_clone_and_fetch_use_env_reading_credential_helper_without_token_in_argv(tmp_path, monkeypatch):
+    import subprocess as _subprocess
+
+    from services.deploy_watcher import checkout
+
+    monkeypatch.setenv("WATCHER_GITHUB_TOKEN", WATCHER_SECRET)
+
+    def ok(*args, **kwargs):
+        return _subprocess.CompletedProcess(args=args[0], returncode=0, stdout="", stderr="")
+
+    with patch("services.deploy_watcher.checkout.subprocess.run", side_effect=ok) as mock_run:
+        sync_checkout("https://github.com/org/private.git", str(tmp_path / "co"), "a" * 40)
+
+    subcommands = []
+    for call in mock_run.call_args_list:
+        argv = call.args[0]
+        subcommands.append(argv[5])
+        assert argv[1:5] == ["-c", "credential.helper=", "-c", f"credential.helper={checkout.CREDENTIAL_HELPER}"]
+        assert "$WATCHER_GITHUB_TOKEN" in checkout.CREDENTIAL_HELPER
+        assert WATCHER_SECRET not in " ".join(argv)
+        assert call.kwargs["env"]["GIT_TERMINAL_PROMPT"] == "0"
+    assert subcommands == ["clone", "fetch", "checkout"]
+
+
+def test_checkout_error_strips_userinfo_and_token(monkeypatch, tmp_path):
+    import subprocess as _subprocess
+
+    monkeypatch.setenv("WATCHER_GITHUB_TOKEN", WATCHER_SECRET)
+    stderr = f"fatal: https://bob:pw123@evil.example/x failed; token={WATCHER_SECRET}"
+
+    def fail(*args, **kwargs):
+        return _subprocess.CompletedProcess(args=args[0], returncode=128, stdout="", stderr=stderr)
+
+    with patch("services.deploy_watcher.checkout.subprocess.run", side_effect=fail):
+        with pytest.raises(CheckoutError) as exc_info:
+            sync_checkout("https://github.com/org/repo.git", str(tmp_path / "co"), "a" * 40)
+
+    message = str(exc_info.value)
+    assert "pw123" not in message
+    assert "bob:" not in message
+    assert WATCHER_SECRET not in message
+    assert "https://evil.example/x" in message
