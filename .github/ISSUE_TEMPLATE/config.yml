@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/OWNER/fleet-mcp/security/advisories/new
+    about: Please do not report security vulnerabilities as public issues. Use GitHub's private security advisory flow instead — see SECURITY.md.
+  - name: Ask a question / start a discussion
+    url: https://github.com/OWNER/fleet-mcp/discussions
+    about: Usage questions and general discussion.

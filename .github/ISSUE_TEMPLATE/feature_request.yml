@@ -1,0 +1,54 @@
+name: Feature request
+description: Propose a new capability or improvement for Fleet MCP.
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a new fleet service or a change touching the protected core
+        (the fleet manifest, the manifest loader, or a `protected: true`
+        service), please describe the safety implications explicitly —
+        see [ARCHITECTURE.md](../../blob/main/ARCHITECTURE.md) and
+        [SECURITY.md](../../blob/main/SECURITY.md) for the guarantees any
+        change needs to preserve.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What can't you do today that this would let you do?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: As concrete as you can make it. Link to a design spec under docs/superpowers/specs/ if you've written one.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of Fleet MCP does this affect?
+      options:
+        - Self-Dev MCP
+        - Deploy Watcher
+        - Fleet manifest / protected-core engine
+        - New fleet service
+        - MCP gateway / permission manager (planned)
+        - model-adapters-mcp / credentials-manager (planned)
+        - Documentation
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: This does not require weakening the protected-core guarantees in SECURITY.md (or I've explained why it does and what should replace them)
+          required: true

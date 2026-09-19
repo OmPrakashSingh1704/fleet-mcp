@@ -1,0 +1,63 @@
+name: Bug report
+description: Something in Fleet MCP isn't working as documented.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please do **not** use
+        this template for security vulnerabilities — see
+        [SECURITY.md](../../blob/main/SECURITY.md) for the private
+        reporting process instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including which component (Self-Dev MCP, Deploy Watcher, the fleet manifest/protection engine) it's in, if known.
+      placeholder: When I called write_file with ..., it did X instead of refusing/succeeding.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Ideally a minimal failing test against this repo, or exact commands run.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Fleet MCP version / commit
+      placeholder: v0.1.0 or commit sha
+    validations:
+      required: true
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      placeholder: "3.11.9"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output/logs
+      description: Full pytest output or service logs. Redact any tokens, credentials, or repo URLs containing tokens before pasting.
+      render: shell
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I confirmed this is not a security vulnerability (if it is, I will use the private advisory flow instead)
+          required: true
+        - label: I checked existing issues for a duplicate
+          required: true
