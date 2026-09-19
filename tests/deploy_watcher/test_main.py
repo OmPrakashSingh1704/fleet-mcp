@@ -1,7 +1,9 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+
+import yaml
 
 from services.deploy_watcher.deploy_manager import DeployResult
-from services.deploy_watcher.main import run_once
+from services.deploy_watcher.main import _loop_iteration, run_once
 
 _MANIFEST_YAML = """
 services:
@@ -137,3 +139,22 @@ def test_manifest_is_read_from_checkout_dir_not_repo_root(tmp_path, monkeypatch)
     results = run_once(poller, manager, checkout_fn, "git@remote", str(checkout_dir))
 
     assert {name for name, _ in results} == {"only-in-checkout"}
+
+
+def test_loop_iteration_swallows_unexpected_error_and_does_not_propagate(tmp_path):
+    # A malformed fleet_manifest.yaml in a merged commit (or any other
+    # unanticipated failure) must not kill the poll loop: the poller's
+    # seen-sha state resets on process restart, so letting this escape
+    # would crash-loop the watcher on the same bad commit forever.
+    poller = MagicMock()
+    manager = MagicMock()
+    checkout_fn = MagicMock()
+
+    with patch(
+        "services.deploy_watcher.main.run_once",
+        side_effect=yaml.YAMLError("bad manifest"),
+    ) as mock_run_once, patch("services.deploy_watcher.main._logger") as mock_logger:
+        _loop_iteration(poller, manager, checkout_fn, "git@remote", str(tmp_path))
+
+    mock_run_once.assert_called_once()
+    mock_logger.exception.assert_called_once()

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Callable, List, Tuple
+from typing import Callable
 
 import docker
 import requests
@@ -27,7 +27,7 @@ def run_once(
     checkout_fn: CheckoutFn,
     remote_url: str,
     checkout_dir: str,
-) -> List[Tuple[str, DeployResult]]:
+) -> list[tuple[str, DeployResult]]:
     """Poll once and, if there's a new commit, check it out and deploy it.
 
     Builds are done from a fresh checkout of the new commit -- never from
@@ -53,7 +53,7 @@ def run_once(
 
     manifest = FleetManifest.load(os.path.join(checkout_dir, "fleet_manifest.yaml"))
 
-    results: List[Tuple[str, DeployResult]] = []
+    results: list[tuple[str, DeployResult]] = []
     for service in manifest.all_services():
         if service.protected or not service.container:
             continue
@@ -72,6 +72,33 @@ def run_once(
         results.append((service.name, result))
 
     return results
+
+
+def _loop_iteration(
+    poller: GitHubPoller,
+    manager: DeployManager,
+    checkout_fn: CheckoutFn,
+    remote_url: str,
+    checkout_dir: str,
+) -> None:
+    """One iteration of the poll loop: run_once(), with every failure mode
+    contained so the loop itself never dies.
+
+    Expected/known failure shapes (GitHub API errors, network errors,
+    checkout failures) are logged as warnings -- transient, and the next
+    poll will likely recover. Anything else (e.g. a malformed
+    fleet_manifest.yaml in the merged commit -- yaml.YAMLError, KeyError,
+    OSError, ...) is logged at exception level and swallowed too: the
+    poller's seen-sha state resets on a fresh process, so letting an
+    unexpected error propagate and kill the watcher would let a supervisor
+    restart crash-loop forever on the same bad commit.
+    """
+    try:
+        run_once(poller, manager, checkout_fn, remote_url, checkout_dir)
+    except (GithubException, requests.RequestException, CheckoutError) as exc:
+        _logger.warning("Poll cycle failed, will retry next interval: %s", exc)
+    except Exception:
+        _logger.exception("unexpected error in deploy loop; continuing")
 
 
 def run() -> None:
@@ -95,10 +122,7 @@ def run() -> None:
     _logger.info("Deploy watcher starting; polling every %s seconds", poll_interval)
 
     while True:
-        try:
-            run_once(poller, manager, sync_checkout, remote_url, checkout_dir)
-        except (GithubException, requests.RequestException, CheckoutError) as exc:
-            _logger.warning("Poll cycle failed, will retry next interval: %s", exc)
+        _loop_iteration(poller, manager, sync_checkout, remote_url, checkout_dir)
         time.sleep(poll_interval)
 
 

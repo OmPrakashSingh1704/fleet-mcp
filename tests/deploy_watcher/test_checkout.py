@@ -1,4 +1,5 @@
 import subprocess
+from unittest.mock import patch
 
 import pytest
 
@@ -80,3 +81,44 @@ def test_sync_checkout_redacts_remote_url_containing_token_on_error(tmp_path):
     message = str(exc_info.value)
     assert "secret-token" not in message
     assert "<remote>" in message
+
+
+def test_sync_checkout_redacts_remote_url_containing_token_on_fetch_failure(tmp_path):
+    # A clone can succeed against a legitimate remote, then a later sync
+    # against the same checkout_dir can be pointed at a different (bad)
+    # remote -- exercising the fetch failure path (as opposed to the clone
+    # failure path already covered above) still must not leak a token
+    # embedded in that remote URL.
+    remote_url = _init_bare_remote(tmp_path)
+    checkout_dir = tmp_path / "checkout"
+    sha_a = _run(["ls-remote", remote_url, "main"]).stdout.split()[0]
+
+    sync_checkout(remote_url, str(checkout_dir), sha_a)
+
+    bad_remote = "https://secret-token@example.invalid/nonexistent/repo.git"
+    _run(["remote", "set-url", "origin", bad_remote], cwd=checkout_dir)
+
+    with pytest.raises(CheckoutError) as exc_info:
+        sync_checkout(bad_remote, str(checkout_dir), sha_a)
+
+    # Note: git itself already strips embedded credentials from the URL it
+    # echoes back in a "fatal: unable to access ..." message on a host
+    # resolution failure, so this doesn't also assert "<remote>" is in the
+    # message the way the clone-failure case above does -- what matters is
+    # that the token never appears.
+    message = str(exc_info.value)
+    assert "secret-token" not in message
+
+
+@pytest.mark.parametrize(
+    "bad_sha",
+    ["-B", "--orphan=x", "abc", "g" * 40, ""],
+)
+def test_sync_checkout_rejects_option_shaped_or_malformed_sha_without_invoking_git(tmp_path, bad_sha):
+    checkout_dir = tmp_path / "checkout"
+
+    with patch("services.deploy_watcher.checkout.subprocess.run") as mock_run:
+        with pytest.raises(CheckoutError):
+            sync_checkout("git@example.invalid:org/repo.git", str(checkout_dir), bad_sha)
+
+    mock_run.assert_not_called()
