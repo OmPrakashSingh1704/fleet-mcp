@@ -705,3 +705,104 @@ def test_probation_resolver_exception_is_treated_as_failed_check_and_rolls_back(
     assert args[0] == "fixture-hello-mcp:previous-good"
     assert registry.get_active_container("fixture-hello-mcp") != "fixture-hello-mcp-abc123"
     assert known_good.get("fixture-hello-mcp") == "fixture-hello-mcp:previous-good"
+
+
+# ---------------------------------------------------------------------------
+# M-1: per-service lock -- rollback's check-and-perform and deploy's registry
+# flip never interleave.
+# ---------------------------------------------------------------------------
+
+import threading  # noqa: E402
+
+
+def _locked_scenario_manager(tmp_path):
+    docker_client = _docker_client({"svc-old": MagicMock(name="svc-old")})
+    manager, registry, known_good = _manager(tmp_path, docker_client)
+    registry.set_active_container("svc", "svc-old")
+    known_good.record("svc", "svc:good")
+    # Keep the probation monitor out of these tests.
+    manager._run_probation = lambda *args, **kwargs: None
+    return manager, registry, known_good, docker_client
+
+
+def test_rollback_waits_for_in_flight_deploy_flip(tmp_path):
+    manager, registry, _known_good, docker_client = _locked_scenario_manager(tmp_path)
+    in_flip = threading.Event()
+    release = threading.Event()
+    real_set = registry.set_active_container
+
+    def paused_set(service, name):
+        if name == "svc-new":
+            in_flip.set()
+            assert release.wait(5)
+        real_set(service, name)
+
+    registry.set_active_container = paused_set
+    rollback_result = {}
+    rollback_done = threading.Event()
+
+    def do_rollback():
+        rollback_result["r"] = manager._rollback("svc", "svc-old")
+        rollback_done.set()
+
+    with patch("services.deploy_watcher.deploy_manager.build_image"), patch(
+        "services.deploy_watcher.deploy_manager.wait_for_healthy", return_value=True
+    ):
+        deployer = threading.Thread(target=manager.deploy, args=("svc", "services/svc", "new"))
+        deployer.start()
+        assert in_flip.wait(5)
+
+        roller = threading.Thread(target=do_rollback)
+        roller.start()
+        # The deploy is paused mid-flip while holding the service lock: the
+        # rollback must not get to check-and-perform yet.
+        assert not rollback_done.wait(0.5)
+        assert not any(c.args and c.args[0] == "svc:good" for c in docker_client.containers.run.call_args_list)
+
+        release.set()
+        deployer.join(5)
+        roller.join(5)
+
+    # Once it ran, the rollback saw the flipped registry and stood down.
+    assert rollback_result["r"].reason == "superseded"
+    assert registry.get_active_container("svc") == "svc-new"
+
+
+def test_deploy_flip_waits_for_in_flight_rollback(tmp_path):
+    manager, registry, _known_good, docker_client = _locked_scenario_manager(tmp_path)
+    in_rollback = threading.Event()
+    release = threading.Event()
+
+    def fake_run(image, **kwargs):
+        if image == "svc:good":
+            in_rollback.set()
+            assert release.wait(5)
+        return MagicMock(name=kwargs.get("name"))
+
+    docker_client.containers.run.side_effect = fake_run
+    deploy_done = threading.Event()
+
+    def do_deploy():
+        manager.deploy("svc", "services/svc", "new")
+        deploy_done.set()
+
+    with patch("services.deploy_watcher.deploy_manager.build_image"), patch(
+        "services.deploy_watcher.deploy_manager.wait_for_healthy", return_value=True
+    ):
+        roller = threading.Thread(target=manager._rollback, args=("svc", "svc-old"))
+        roller.start()
+        assert in_rollback.wait(5)
+
+        deployer = threading.Thread(target=do_deploy)
+        deployer.start()
+        # The new container can be built/started and health-checked, but the
+        # registry flip must wait for the rollback to finish.
+        assert not deploy_done.wait(0.5)
+        assert registry.get_active_container("svc") == "svc-old"
+
+        release.set()
+        roller.join(5)
+        deployer.join(5)
+
+    assert deploy_done.is_set()
+    assert registry.get_active_container("svc") == "svc-new"

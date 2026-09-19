@@ -17,13 +17,16 @@ ENV PYTHONPATH=/app
 # the self-dev-mcp service) -- it has no use for either, and this Dockerfile
 # must never reference the docker socket in any way.
 #
+# The app source (/app/services, fleet_manifest.yaml, requirements.txt)
+# stays owned by root and read-only to selfdev, so code running as selfdev
+# -- including agent-written tests executed by run_tests -- cannot rewrite
+# the running server or its manifest code. Only /app/tmp is writable:
 # create_workspace() (services/self_dev_mcp/workspace.py) uses
-# tempfile.mkdtemp(), which honors TMPDIR; point it at a directory this
-# user owns outright instead of relying on the base image's /tmp
-# permissions.
+# tempfile.mkdtemp(), which honors TMPDIR, so workspaces land there.
 RUN useradd --create-home --shell /usr/sbin/nologin --uid 1000 selfdev \
     && mkdir -p /app/tmp \
-    && chown -R selfdev:selfdev /app
+    && chown selfdev:selfdev /app/tmp \
+    && chmod 0700 /app/tmp
 ENV TMPDIR=/app/tmp
 USER selfdev
 

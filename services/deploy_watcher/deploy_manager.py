@@ -67,6 +67,21 @@ class DeployManager:
         self._repo_root = repo_root
         self._run_options = run_options
         self._health_url_resolver = health_url_resolver or _default_health_url_resolver
+        # Per-service locks serialize every registry "read active -> act ->
+        # write active" section (deploy's flip, rollback's check-and-perform,
+        # probation's promotion), so a probation rollback can never interleave
+        # with a newer deploy's flip. Never held across a build or the initial
+        # health wait.
+        self._locks_guard = threading.Lock()
+        self._service_locks: dict[str, threading.Lock] = {}
+
+    def _service_lock(self, service_name: str) -> threading.Lock:
+        with self._locks_guard:
+            lock = self._service_locks.get(service_name)
+            if lock is None:
+                lock = threading.Lock()
+                self._service_locks[service_name] = lock
+            return lock
 
     def deploy(
         self,
@@ -116,14 +131,15 @@ class DeployManager:
             self._stop_and_remove(new_container)
             return DeployResult(success=False, image_tag=image_tag, reason="failed initial health check")
 
-        old_container_name = self._registry.get_active_container(service_name)
-        self._registry.set_active_container(service_name, new_container_name)
+        with self._service_lock(service_name):
+            old_container_name = self._registry.get_active_container(service_name)
+            self._registry.set_active_container(service_name, new_container_name)
 
-        # Best-effort: a failure stopping the old container must not stop
-        # the new release from going live or from being watched by
-        # probation -- the registry has already flipped.
-        if old_container_name:
-            self._stop_ignore_not_found(old_container_name)
+            # Best-effort: a failure stopping the old container must not stop
+            # the new release from going live or from being watched by
+            # probation -- the registry has already flipped.
+            if old_container_name:
+                self._stop_ignore_not_found(old_container_name)
 
         threading.Thread(
             target=self._run_probation,
@@ -142,8 +158,9 @@ class DeployManager:
             # better image to serve, so leave whatever is running alone.
             return DeployResult(success=False, image_tag="", reason="no known-good image on record")
 
-        active_container_name = self._registry.get_active_container(service_name)
-        return self._perform_rollback(service_name, active_container_name, good_tag)
+        with self._service_lock(service_name):
+            active_container_name = self._registry.get_active_container(service_name)
+            return self._perform_rollback(service_name, active_container_name, good_tag)
 
     def _rollback(self, service_name: str, expected_active: str) -> DeployResult:
         """Roll back only if ``expected_active`` is still the active container.
@@ -152,15 +169,16 @@ class DeployManager:
         re-reads the registry immediately before acting, and does nothing
         at all if the service has moved on.
         """
-        active_container_name = self._registry.get_active_container(service_name)
-        if active_container_name != expected_active:
-            return DeployResult(success=False, image_tag="", reason="superseded")
+        with self._service_lock(service_name):
+            active_container_name = self._registry.get_active_container(service_name)
+            if active_container_name != expected_active:
+                return DeployResult(success=False, image_tag="", reason="superseded")
 
-        good_tag = self._known_good.get(service_name)
-        if good_tag is None:
-            return DeployResult(success=False, image_tag="", reason="no known-good image on record")
+            good_tag = self._known_good.get(service_name)
+            if good_tag is None:
+                return DeployResult(success=False, image_tag="", reason="no known-good image on record")
 
-        return self._perform_rollback(service_name, active_container_name, good_tag)
+            return self._perform_rollback(service_name, active_container_name, good_tag)
 
     def _perform_rollback(
         self, service_name: str, active_container_name: Optional[str], good_tag: str
@@ -216,8 +234,9 @@ class DeployManager:
 
             time.sleep(10)
 
-        if self._registry.get_active_container(service_name) == container_name:
-            self._known_good.record(service_name, image_tag)
+        with self._service_lock(service_name):
+            if self._registry.get_active_container(service_name) == container_name:
+                self._known_good.record(service_name, image_tag)
 
     def _check_probation_once(self, container_name: str, health_check_port: int) -> bool:
         try:
