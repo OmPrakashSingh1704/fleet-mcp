@@ -34,7 +34,10 @@ services:
     networks:
       - mcp-fleet
     ports:
-      - "8082:8080"
+      # Bound to loopback only: the SSE endpoint (/sse, /messages/) has no
+      # authentication of its own, so this must not be reachable from
+      # outside this host by default -- see SECURITY.md#known-limitations.
+      - "127.0.0.1:8082:8080"
     environment:
       SELF_DEV_REPO_REMOTE: ${SELF_DEV_REPO_REMOTE}
       GITHUB_TOKEN: ${GITHUB_TOKEN}
@@ -72,7 +75,7 @@ services:
       # Docker socket access is root-equivalent on the host: anyone who can
       # reach this socket can run arbitrary containers with arbitrary host
       # mounts, independent of which user inside the container holds it
-      # (see services/deploy_watcher/Dockerfile for the non-root user this
-      # image still runs as).
+      # (see services/deploy_watcher/Dockerfile and entrypoint.sh for how
+      # this container still drops to a non-root user at runtime).
       - /var/run/docker.sock:/var/run/docker.sock
       - watcher-data:/data

@@ -74,6 +74,16 @@ the least authority that still lets it do its job — git and GitHub API
 calls, and file I/O confined to a throwaway workspace. It cannot reach the
 Deploy Watcher's authority by any path this repo defines.
 
+A separate, orthogonal boundary is the Self-Dev MCP's HTTP transport
+(`--transport http`, used when it's deployed under `docker-compose.yml`):
+its SSE endpoint (`/sse`, `/messages/`) has no authentication of its own,
+so reachability of the port *is* the access control. `docker-compose.yml`
+binds it to `127.0.0.1` for exactly this reason. This is a network-exposure
+boundary, not an authority boundary — it doesn't change what the container
+can do, only who can ask it to do it. See
+[SECURITY.md#known-limitations](SECURITY.md#known-limitations) for the full
+writeup and the planned MCP gateway as its eventual fix.
+
 ## The self-dev cycle
 
 ```mermaid

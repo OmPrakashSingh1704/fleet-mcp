@@ -190,6 +190,24 @@ your own risk assessment, not as an invitation to assume they're fixed:
   container should be treated as "will execute arbitrary Python the agent
   generates" — network and filesystem isolation for that container matter
   as much as the write-tool checks in this document.
+- **The Self-Dev MCP's SSE endpoint has no authentication of its own.**
+  `--transport http` exposes `/sse` and `/messages/` with no auth, API key,
+  or session check beyond what MCP's SSE transport itself does — anyone who
+  can reach the port can drive every Self-Dev MCP tool (including
+  `write_file`, `submit_pr`, and every other write path documented in this
+  file). Deploy it only on a private network, never expose it to the
+  internet, and put it behind the planned MCP gateway once that exists. See
+  the Hardening checklist below.
+- **Docker socket access is root-equivalent, regardless of the watcher's
+  non-root user.** `services/deploy_watcher/entrypoint.sh` runs the watcher
+  process as a non-root `watcher` user, but only after joining it to
+  whichever group owns `/var/run/docker.sock` on the host. On Docker
+  Desktop that socket is owned by GID 0 (`root`), so `watcher` joins the
+  `root` group to reach it. This is documented, not accidental: anyone who
+  can talk to `docker.sock` can run arbitrary containers with arbitrary
+  host mounts no matter which uid holds that access, so the non-root user
+  is defense-in-depth for the watcher's other code paths (checkout, image
+  builds, `/data` I/O), not a sandbox around the socket itself.
 
 ## Hardening checklist for operators
 
@@ -205,6 +223,11 @@ Before pointing Fleet MCP at a repository you care about:
 - [ ] Run the Self-Dev MCP container with no Docker socket mount and no
       deploy credentials in its environment — verify this at the
       docker-compose/deployment level, not just by trusting the source.
+- [ ] Never publish the Self-Dev MCP's HTTP port beyond `localhost` or a
+      private network — its SSE endpoint has no authentication of its own
+      (see Known limitations above). The default `docker-compose.yml` binds
+      it to `127.0.0.1`; keep that binding, or put a real authenticating
+      proxy / the planned MCP gateway in front of it before widening it.
 - [ ] Run the Self-Dev MCP's `run_tests` step with network egress
       restrictions appropriate for "this executes agent-written code."
 - [ ] Set up your own container/image pruning job — none exists yet.

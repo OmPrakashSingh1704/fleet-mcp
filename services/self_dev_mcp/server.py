@@ -227,6 +227,9 @@ def build_http_app() -> Starlette:
 
     async def handle_sse(request):
         async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
+            # Mirrors FastMCP.run_sse_async in mcp==1.2.0, which has no public
+            # sse_app(); _mcp_server is private, so re-verify this against any
+            # mcp version bump.
             await mcp_app._mcp_server.run(
                 streams[0],
                 streams[1],

@@ -84,6 +84,15 @@ the agent has no tool capable of editing.
   for an issue that already has an open PR resumes the same
   `selfdev/issue-N` branch instead of branching again, so follow-up commits
   land on the same PR. There is no force-push anywhere in the pipeline.
+- **Docker Compose + per-service Dockerfiles** — `docker-compose.yml` brings
+  up the fixture service, Self-Dev MCP, and the Deploy Watcher on a
+  dedicated `mcp-fleet` network, each with its own non-root Dockerfile and
+  only the credentials/mounts it actually needs (see
+  [Quickstart](#quickstart)).
+- **Self-Dev MCP HTTP transport** — `--transport http` serves Self-Dev MCP
+  over SSE (`/sse`, `/messages/`) plus `GET /health` on port 8080, so the
+  Deploy Watcher's blue/green health checks have something to check;
+  `--transport stdio` (the default) is unchanged for local/CLI use.
 
 **Roadmap (not built yet — see [Status](#status--roadmap)):**
 
@@ -91,7 +100,6 @@ the agent has no tool capable of editing.
   orchestrating agent and every capability server, including Self-Dev MCP)
 - `model-adapters-mcp` and `credentials-manager`, and the chat-side "Model
   Manager" flow for adding support for a new LLM backend on request
-- Docker Compose / per-service Dockerfiles for running the fleet locally
 - CI workflow and CODEOWNERS enforcing the human-review requirement at the
   platform level
 
@@ -191,28 +199,51 @@ This runs the full suite for the protection engine, the Self-Dev MCP tools,
 and the Deploy Watcher — including the adversarial tests that assert a
 protected-path write is refused and a probation failure triggers rollback.
 
-### Run the fleet locally (coming soon)
+### Run the fleet locally
 
 ```bash
+cp .env.example .env
+# edit .env: set GITHUB_TOKEN, GITHUB_REPO_FULL_NAME, REPO_REMOTE, SELF_DEV_REPO_REMOTE
 docker compose up
 ```
 
-Per-service Dockerfiles and a `docker-compose.yml` are in progress — see
-[Status](#status--roadmap). Once available, this will bring up the fixture
-service, Self-Dev MCP, and Deploy Watcher against a local Docker daemon.
+This brings up three containers on the `mcp-fleet` network:
+
+- **fixture-hello-mcp** — `http://localhost:8081/health` — a minimal Flask
+  service used as the Deploy Watcher's local smoke-test target.
+- **self-dev-mcp** — `http://127.0.0.1:8082/health` (bound to loopback only,
+  not published to other hosts — see
+  [SECURITY.md](SECURITY.md#known-limitations)) — the Self-Dev MCP server
+  over `--transport http`.
+- **deploy-watcher** — no published port; it only talks outbound to GitHub
+  and to the Docker daemon via the mounted `docker.sock`.
+
+With placeholder `.env` values (or real ones that just don't resolve),
+`fixture-hello-mcp` and `self-dev-mcp` still start and their `/health`
+checks still pass — GitHub credentials are only resolved lazily, on the
+first tool call that actually needs them. Any Self-Dev MCP tool that talks
+to GitHub (`list_assigned_issues`, `submit_pr`, `check_pr_status`, ...) will
+return an `"ERROR: ..."` string until `GITHUB_TOKEN` and
+`GITHUB_REPO_FULL_NAME` are set to real values.
 
 ## Repo layout
 
 ```
 services/
   common/manifest.py        fleet manifest loader + protected-path engine
-  self_dev_mcp/              Self-Dev MCP: git ops, workspace, tools, server
+  self_dev_mcp/              Self-Dev MCP: git ops, workspace, tools, server,
+                                Dockerfile
   deploy_watcher/             Deploy Watcher: checkout, build, health, blue/green,
-                                rollback, service registry, known-good store
+                                rollback, service registry, known-good store,
+                                Dockerfile, entrypoint.sh
+  fixture_hello_mcp/          fixture Flask service + Dockerfile, used as the
+                                Deploy Watcher's local smoke-test target
 tests/                      unit tests, mirroring the services/ layout
 docs/superpowers/specs/     design specs for this system and its extensions
 docs/superpowers/plans/     implementation plans
 fleet_manifest.yaml         the fleet manifest (protected)
+docker-compose.yml          local fleet: mcp-fleet network + all three services
+.env.example                template for the .env docker-compose reads secrets from
 ```
 
 ## Status / Roadmap
@@ -222,8 +253,9 @@ fleet_manifest.yaml         the fleet manifest (protected)
 | Fleet manifest + protected-path engine | Built |
 | Self-Dev MCP (7 tools, workspace containment, attempt cap) | Built |
 | Deploy Watcher (blue/green, probation, rollback, known-good floor) | Built |
-| Docker Compose + per-service Dockerfiles | In progress |
-| CI workflow + CODEOWNERS | In progress |
+| Docker Compose + per-service Dockerfiles | Built |
+| Self-Dev MCP HTTP transport (`--transport http`) | Built |
+| CI workflow + CODEOWNERS | Planned |
 | MCP gateway | Planned |
 | Permission manager | Planned |
 | `model-adapters-mcp` | Planned |

@@ -525,3 +525,13 @@ def test_parse_args_accepts_http_transport_with_host_and_port():
     assert args.transport == "http"
     assert args.host == "127.0.0.1"
     assert args.port == 9000
+
+
+def test_fastmcp_still_exposes_private_mcp_server_attribute():
+    # build_http_app() relies on FastMCP._mcp_server -- a private attribute
+    # with no public accessor in mcp==1.2.0 -- to mirror run_sse_async()'s
+    # own route construction. If a future mcp version removes or renames it,
+    # this must fail loudly instead of build_http_app() silently breaking.
+    from mcp.server.fastmcp import FastMCP
+
+    assert hasattr(FastMCP("x"), "_mcp_server")

@@ -14,11 +14,36 @@ minor versions).
 - Product documentation set: README, SECURITY, CONTRIBUTING, CODE_OF_CONDUCT,
   ARCHITECTURE, SUPPORT, GOVERNANCE, and GitHub issue/PR templates.
 - Apache License 2.0 `LICENSE` and `NOTICE` files.
-- Project logo (`assets/logo.svg`, `assets/logo-mark.svg`).
+- Project logo (`assets/logo.svg`, `assets/logo-mark.svg`, and
+  `assets/logo-dark.svg` for a dark-mode variant, switched via a README
+  `<picture>` element based on `prefers-color-scheme`).
 - Project metadata in `pyproject.toml` (package name `fleet-mcp`,
   description, license, readme) and an explicit
   `asyncio_default_fixture_loop_scope` to silence a pytest-asyncio
   deprecation warning under strict-warnings test runs.
+- `services/fixture_hello_mcp/`: a minimal Flask service (`GET /health`,
+  `GET /`) used as the Deploy Watcher's local build/run/health-check smoke
+  test target.
+- Per-service Dockerfiles (`services/fixture_hello_mcp/Dockerfile`,
+  `services/self_dev_mcp/Dockerfile`, `services/deploy_watcher/Dockerfile`),
+  `docker-compose.yml` (the `mcp-fleet` network plus all three services),
+  and a committed `.env.example` template for the secrets `docker-compose.yml`
+  reads via `${VAR}` interpolation from a gitignored `.env`.
+- Self-Dev MCP `--transport {stdio,http}` (default `stdio`): `http` serves
+  the server over SSE (`/sse`, `/messages/`) plus `GET /health` on port
+  8080, so it can be blue/green health-checked by the Deploy Watcher like
+  any other fleet service.
+- `services/deploy_watcher/entrypoint.sh`: a runtime entrypoint that starts
+  the watcher container as root, joins its non-root `watcher` user to
+  whatever group actually owns the host's `/var/run/docker.sock` (its GID
+  varies by host and isn't known at image build time), and then drops to
+  `watcher` via `setpriv` before running the real command.
+- `services/self_dev_mcp/github_client.py`: `GitHubClient` now resolves the
+  GitHub repo lazily, on first use, instead of in `__init__` — a bad or
+  unreachable `GITHUB_TOKEN` no longer crashes the process at startup
+  (previously this made Self-Dev MCP's HTTP server fail to bind before
+  `/health` could ever respond); it now surfaces as an `"ERROR: ..."` string
+  from the first tool call that needs GitHub.
 
 ## [0.1.0] - 2026-09-19
 

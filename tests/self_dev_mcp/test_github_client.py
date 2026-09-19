@@ -169,3 +169,27 @@ def test_github_client_uses_auth_token(mock_github_cls):
     auth = mock_github_cls.call_args.kwargs["auth"]
     assert isinstance(auth, Auth.Token)
     assert auth.token == "token-123"
+
+
+# --- Ruling A: lazy repo resolution (a bad token must not crash __init__) ---
+
+
+@patch("services.self_dev_mcp.github_client.Github")
+def test_constructing_client_makes_no_get_repo_call(mock_github_cls):
+    GitHubClient("token", "org/repo")
+
+    mock_github_cls.return_value.get_repo.assert_not_called()
+
+
+@patch("services.self_dev_mcp.github_client.Github")
+def test_first_method_call_resolves_repo_once_and_second_call_reuses_it(mock_github_cls):
+    mock_repo = MagicMock()
+    mock_issue = MagicMock()
+    mock_repo.get_issue.return_value = mock_issue
+    mock_github_cls.return_value.get_repo.return_value = mock_repo
+
+    client = GitHubClient("token", "org/repo")
+    client.comment_on_issue(1, "first")
+    client.comment_on_issue(2, "second")
+
+    mock_github_cls.return_value.get_repo.assert_called_once_with("org/repo")

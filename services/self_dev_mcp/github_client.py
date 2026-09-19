@@ -1,12 +1,25 @@
 from __future__ import annotations
 
 from github import Auth, Github
+from github.Repository import Repository
 
 
 class GitHubClient:
     def __init__(self, token: str, repo_full_name: str):
         self._gh = Github(auth=Auth.Token(token))
-        self._repo = self._gh.get_repo(repo_full_name)
+        self._repo_full_name = repo_full_name
+        self._repo_cache: Repository | None = None
+
+    @property
+    def _repo(self) -> Repository:
+        # No network I/O happens in __init__: a bad token must not crash the
+        # process at startup (e.g. inside build_http_app(), before uvicorn
+        # ever binds the health-check port). Resolution is deferred to the
+        # first tool call that actually needs the repo, and cached after
+        # that so repeated calls don't re-fetch it.
+        if self._repo_cache is None:
+            self._repo_cache = self._gh.get_repo(self._repo_full_name)
+        return self._repo_cache
 
     def list_issues_by_label(self, label: str) -> list:
         issues = self._repo.get_issues(state="open", labels=[label])
