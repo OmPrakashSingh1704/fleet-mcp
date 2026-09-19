@@ -14,13 +14,17 @@ git clone https://github.com/OmPrakashSingh1704/fleet-mcp.git
 cd fleet-mcp
 python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt
-python -m pytest tests -W error::DeprecationWarning
+python -m pytest tests -m "not docker" -v -W error::DeprecationWarning -W error::pytest.PytestUnhandledCoroutineWarning
 ```
 
-Running with `-W error::DeprecationWarning` is intentional — it's how CI
-runs the suite, and it's how we've kept the codebase free of deprecation
-noise (e.g. pytest-asyncio's fixture-loop-scope warning) rather than letting
-warnings accumulate silently. If your change introduces a new deprecation
+Both `-W error` flags are intentional and match CI.
+`error::DeprecationWarning` keeps the codebase free of deprecation noise.
+`error::pytest.PytestUnhandledCoroutineWarning` turns an `async def` test
+that pytest would silently *skip* (no async plugin is installed or needed)
+into a hard failure. Write async checks as sync tests that drive the
+coroutine with `asyncio.run(...)`. pytest-asyncio is not a dependency; if
+you have it installed globally, it may print a harmless loop-scope warning,
+or you can add `-p no:asyncio`. If your change introduces a new deprecation
 warning, fix it before opening a PR rather than suppressing the flag.
 
 ## Branch and PR flow
@@ -59,7 +63,8 @@ change will get sent back, no matter how obviously correct the diff looks.
 Run the full suite before pushing:
 
 ```bash
-python -m pytest tests -W error::DeprecationWarning
+python -m pytest tests -m "not docker" -v -W error::DeprecationWarning -W error::pytest.PytestUnhandledCoroutineWarning
+python -m pytest tests -m docker -v   # needs a reachable Docker daemon
 ```
 
 `tests/integration/` proves the git and Docker mechanics against a real
@@ -72,13 +77,21 @@ automated.
 
 ## Protected core changes need CODEOWNERS approval
 
-The fleet manifest (`fleet_manifest.yaml`), the manifest loader
-(`services/common/manifest.py`), and any service marked `protected: true` in
-the manifest (currently `deploy-watcher`; `permission-manager` and
-`mcp-gateway` once they exist) are the protected core described in
-[ARCHITECTURE.md](ARCHITECTURE.md) and [SECURITY.md](SECURITY.md).
-`.github/CODEOWNERS` already lists these paths (plus `/.github/` and
-`SECURITY.md`), but its owner is still the `@OWNER` placeholder — GitHub
+The protected core described in [ARCHITECTURE.md](ARCHITECTURE.md) and
+[SECURITY.md](SECURITY.md) is:
+
+- the exact files in `ALWAYS_PROTECTED_PATHS`: `fleet_manifest.yaml`,
+  `services/common/manifest.py`, `services/__init__.py`, `requirements.txt`,
+  `docker-compose.yml`, `pyproject.toml`, `.gitattributes`, `.gitignore`;
+- the subtrees in `ALWAYS_PROTECTED_PREFIXES`: `services/common/` and
+  `.github/`;
+- every service marked `protected: true` in the manifest (currently
+  `deploy-watcher`; `permission-manager` and `mcp-gateway` once they exist).
+
+`.github/CODEOWNERS` mirrors all of these (plus `SECURITY.md`), and
+`tests/test_manifest.py` fails if a hardcoded entry is missing from it. If
+you add to the protected core, update both. Its owner is still the
+`@OWNER` placeholder — GitHub
 flags those entries as invalid until someone replaces `@OWNER` with a real
 GitHub user or team, and code-owner review can't be enforced until both that
 replacement and branch protection (see below) are done. Once both are in
@@ -92,6 +105,25 @@ apply the extra scrutiny.
 
 ## Enabling branch protection
 
+### Supported setup for `OmPrakashSingh1704/fleet-mcp`
+
+The repository is **private, on GitHub Pro**. Protection is turned on in
+this order:
+
+1. **The owner merges the foundation branch.** Until then there is no
+   protection on `main`.
+2. **Right after that merge**, `@OWNER` in `.github/CODEOWNERS` is replaced
+   with `@OmPrakashSingh1704`, and full branch protection is applied to
+   `main` with the command below: required `test` check, 1 approving
+   review, code-owner review, dismiss stale reviews, `enforce_admins`, no
+   force-push, no deletions.
+3. **From then on, self-dev uses a separate bot identity** (a machine user
+   or a GitHub App) for `SELF_DEV_GITHUB_TOKEN`, so its PRs are authored by
+   the bot and the owner can approve them. A live agent is not pointed at
+   the repo before steps 2 and 3 are done.
+
+### Details
+
 The CI workflow (`.github/workflows/test.yml`, job id `test`) and
 `.github/CODEOWNERS` exist in this repository, but neither is enforced until
 a repo admin turns on branch protection for `main` — GitHub does not do this
@@ -100,6 +132,21 @@ automatically just because the files exist. Before enabling it, replace the
 team; otherwise GitHub treats every CODEOWNERS entry as invalid and
 "require code-owner reviews" can never be satisfied, permanently blocking
 every PR that touches a protected-core path.
+
+**Plan requirement:** branch protection on a **private** repository needs a
+paid GitHub plan (Pro for personal accounts, Team or Enterprise for
+organizations). On GitHub Free it is available only for public repos, and
+the API call below fails with a 403 ("Upgrade to GitHub Pro or make this
+repository public") on a private one.
+
+**Use a separate bot identity for self-dev.** Branch protection and
+self-dev must be set up together. If `SELF_DEV_GITHUB_TOKEN` is the
+owner's own PAT, self-dev PRs are authored by the owner, and a sole owner
+cannot approve their own PR with `enforce_admins` on. Give Self-Dev MCP a
+machine user or a GitHub App with fine-grained contents, pull requests and
+issues read/write on this repo only. Both are
+[preconditions](SECURITY.md#preconditions-before-pointing-a-live-agent-at-a-repo)
+before a live agent is pointed at the repo.
 
 Once `@OWNER` is replaced, a repo admin with `gh` authenticated against
 `OmPrakashSingh1704/fleet-mcp` runs:
@@ -162,6 +209,12 @@ your comments land on the branch that gets the fix.
    Leave `protected: false` unless the service holds deploy authority or
    sits in the permission/auth path — protected services are meant to be
    rare, human-reviewed-only, and are not something you opt into casually.
+   `container` opts the service into Deploy Watcher blue/green deploys;
+   omit it for a compose-managed service (as `self-dev-mcp` does). The
+   watcher cannot yet pass environment variables to the containers it
+   starts. `health_check` is informational only: the watcher always probes
+   `http://<service>-<sha>:8080/health` on the `mcp-fleet` network, so the
+   service must listen on port 8080.
 3. Add a `Dockerfile` for the service under `services/<your_service>/` (repo
    root as build context, per the pattern the Deploy Watcher expects — see
    `services/deploy_watcher/image_builder.py`).

@@ -18,9 +18,7 @@ minor versions).
   `assets/logo-dark.svg` for a dark-mode variant, switched via a README
   `<picture>` element based on `prefers-color-scheme`).
 - Project metadata in `pyproject.toml` (package name `fleet-mcp`,
-  description, license, readme) and an explicit
-  `asyncio_default_fixture_loop_scope` to silence a pytest-asyncio
-  deprecation warning under strict-warnings test runs.
+  description, license, readme).
 - `services/fixture_hello_mcp/`: a minimal Flask service (`GET /health`,
   `GET /`) used as the Deploy Watcher's local build/run/health-check smoke
   test target.
@@ -31,8 +29,7 @@ minor versions).
   reads via `${VAR}` interpolation from a gitignored `.env`.
 - Self-Dev MCP `--transport {stdio,http}` (default `stdio`): `http` serves
   the server over SSE (`/sse`, `/messages/`) plus `GET /health` on port
-  8080, so it can be blue/green health-checked by the Deploy Watcher like
-  any other fleet service.
+  8080, so its container can be health-checked.
 - `services/deploy_watcher/entrypoint.sh`: a runtime entrypoint that starts
   the watcher container as root, joins its non-root `watcher` user to
   whatever group actually owns the host's `/var/run/docker.sock` (its GID
@@ -63,6 +60,91 @@ minor versions).
   README, SECURITY.md, CONTRIBUTING.md, GOVERNANCE.md, and ARCHITECTURE.md
   clarifying that the workflow and CODEOWNERS file now exist but
   enforcement still requires the admin to enable branch protection.
+- `run_tests` timeout: `SELF_DEV_TEST_TIMEOUT_SECONDS` (default 600). A run
+  that exceeds it returns `"ERROR: tests timed out after Ns"`.
+- Policy-denial audit log: every `REFUSED`/`EXHAUSTED` decision in
+  `write_file`, `read_file` and `run_tests` is logged at WARNING on the
+  `fleet_mcp.audit` logger (stderr) as
+  `policy-denial tool=… issue=… path=<repr> reason=…`. Content is never
+  logged.
+- `restart: unless-stopped` on every compose service.
+
+### Security
+
+- **Critical: `.git/` was readable and writable through the tools.**
+  `write_file('.git/config', …)` could plant a `remote.origin.push` refmap
+  that made `submit_pr` force-push the agent's branch onto `main`, and
+  `.git/hooks/*` / `core.fsmonitor` gave code execution. `read_file`,
+  `write_file` and `run_tests` now refuse any path with a `.git` component
+  (case-insensitive, Windows-canonicalized, checked on both the typed and
+  the resolved path).
+- Every self-dev git call now runs with `core.hooksPath=<empty dir>` and
+  `core.fsmonitor=false`, and `push` uses the explicit, non-forcing refspec
+  `refs/heads/selfdev/issue-N:refs/heads/selfdev/issue-N`. A tampered
+  `.git/config` can no longer move `main` or run a hook.
+- Symlink/junction bypass closed: `write_file` re-checks the manifest
+  against the symlink-resolved target, so `innocent -> services/deploy_watcher`
+  can't be used to write a protected file.
+- Protected core expanded: `ALWAYS_PROTECTED_PATHS` adds
+  `services/__init__.py`, `requirements.txt`, `docker-compose.yml`,
+  `pyproject.toml`, `.gitattributes` and `.gitignore`. A new
+  `ALWAYS_PROTECTED_PREFIXES` protects `services/common/` and `.github/`.
+  Path canonicalization also strips NTFS stream suffixes and trailing
+  dots/spaces. CODEOWNERS mirrors the list, and a test enforces that.
+- Git authentication for private repos goes through a credential helper
+  that reads the token from the environment at call time. The token never
+  appears in argv, a URL, `.git/config` or logs. `GitOpsError` and
+  `CheckoutError` redact the remote URL, any URL userinfo and the token
+  value. `GIT_TERMINAL_PROMPT=0` is set for every git call.
+- `run_tests` refuses paths starting with `-` and passes the path after
+  `--`, so it can't smuggle pytest options such as `--basetemp`. Tokens are
+  stripped from the test subprocess environment (hygiene only; see
+  SECURITY.md).
+- The Self-Dev MCP image keeps its app source root-owned and read-only to
+  the `selfdev` user. Only `/app/tmp` is writable. The fixture image now
+  runs as a non-root user.
+- Security docs rewritten to be honest about the model. The tool checks
+  bind a *cooperative* agent. `run_tests` runs agent code with the self-dev
+  token, and that code can write protected files that `submit_pr` commits
+  and can call the GitHub API directly. Branch protection plus a separate
+  bot identity is now a stated **precondition** before pointing a live
+  agent at a repo. Also documented: branch protection on a private repo
+  needs a paid GitHub plan.
+
+### Changed
+
+- **Breaking (env rename, token split):** the shared `GITHUB_TOKEN` is
+  gone. Self-Dev MCP reads `SELF_DEV_GITHUB_TOKEN` (fine-grained: contents,
+  pull requests and issues read/write) for both the GitHub API and git. The
+  Deploy Watcher reads `WATCHER_GITHUB_TOKEN` (contents read-only) for
+  polling and checkout. Update your `.env` (see `.env.example`).
+- `run_tests` output is now `"OK (exit 0)\n<output>"` or
+  `"FAILED (exit N)\n<output>"`.
+- MCP tools are `async` and run their handlers in a worker thread, so a
+  long `run_tests` no longer blocks the event loop or `/health`.
+- `self-dev-mcp` is compose-managed only for this release. Its manifest
+  entry no longer has `container`/`health_check`, so the Deploy Watcher
+  skips it. Update it with `docker compose up --build self-dev-mcp`.
+- The manifest `health_check` field is documented as informational. The
+  watcher always probes `http://<service>-<sha>:8080/health`.
+- `anyio` is pinned (`4.12.1`) as a direct dependency. Newer anyio releases
+  break Starlette's `TestClient` under `-W error::DeprecationWarning`.
+- `asyncio_default_fixture_loop_scope` removed from `pyproject.toml`
+  (pytest-asyncio is not a dependency). The smoke test that relied on it
+  was silently skipped; it now runs via `asyncio.run`, and CI adds
+  `-W error::pytest.PytestUnhandledCoroutineWarning`.
+- Root `.gitignore` now also covers `.superpowers/`, virtualenvs, caches,
+  build output and editor folders.
+
+### Fixed
+
+- The deploy manager takes a per-service lock around the registry flip,
+  rollback's check-and-perform, and probation's known-good promotion, so a
+  probation rollback can't interleave with a newer deploy.
+- Tool handlers never raise on `OSError`, `UnicodeDecodeError` or
+  `requests.RequestException`; they return `"ERROR: …"`.
+- Concurrent `start_issue` calls for the same issue clone only once.
+- `create_workspace` removes its temp directory if the clone fails.
 
 ## [0.1.0] - 2026-09-19
 

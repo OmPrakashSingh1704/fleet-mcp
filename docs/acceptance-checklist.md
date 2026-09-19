@@ -11,6 +11,26 @@ something the suite automates.
 Run through this checklist once, against your own fork or repo, before
 trusting Fleet MCP with real issues.
 
+## Preconditions (do not skip)
+
+Before pointing a live agent at the repo, both must be true (see
+[SECURITY.md](../SECURITY.md#preconditions-before-pointing-a-live-agent-at-a-repo)):
+
+- **Branch protection is enabled on `main`**: required `test` check, one
+  approving review, code-owner review with a real owner in
+  `.github/CODEOWNERS`, dismiss stale reviews, `enforce_admins`, no
+  force-push, no deletions. On a private repo this needs a paid GitHub plan
+  (Pro, Team or Enterprise). See
+  [CONTRIBUTING.md#enabling-branch-protection](../CONTRIBUTING.md#enabling-branch-protection).
+- **Self-Dev MCP uses a separate bot identity** (a machine user or GitHub
+  App) for `SELF_DEV_GITHUB_TOKEN`, not the owner's PAT, so the owner can
+  approve its PRs. The watcher uses its own read-only
+  `WATCHER_GITHUB_TOKEN`.
+
+The tool-level checks bind only a cooperative agent. Code the agent runs
+through `run_tests` can write protected files into its PR branch and call
+the GitHub API, so the preconditions above are the real backstop.
+
 ## Steps
 
 1. **Create a `self-dev`-labeled issue** in your GitHub repo describing a
@@ -24,6 +44,7 @@ trusting Fleet MCP with real issues.
    [CONTRIBUTING.md#enabling-branch-protection](../CONTRIBUTING.md#enabling-branch-protection)
    and `@OWNER` replaced in `.github/CODEOWNERS`): confirm the PR cannot be
    merged until CI passes and a human review is submitted.
+   Also confirm the PR's author is the bot identity, not the owner.
 4. **Merge** the PR once CI is green and it's approved.
 5. **Observe the watcher deploy**: confirm the Deploy Watcher picks up the
    new commit on `main`, builds the image, and promotes it — check the

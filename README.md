@@ -42,38 +42,56 @@ independent of the agent's own judgment.**
   file, write a file, run tests, open a PR — not blanket shell access.
 - Guardrails (the fleet manifest, workspace containment, the attempt cap,
   GitHub branch protection, credential scoping) sit *between* the agent's
-  intent and anything irreversible, and they don't trust the agent's
-  reasoning to hold. A prompt-injected or simply wrong agent still can't
-  write to a protected path, still can't merge its own PR, and still can't
-  touch a Docker socket.
+  intent and anything irreversible. They work in two layers:
+  - the **tool-level checks** stop a *cooperative* agent, one that only
+    edits through `write_file`, from touching protected paths or `.git/`;
+  - **GitHub branch protection plus a separate bot identity** is the real
+    backstop against a *hostile* (e.g. prompt-injected) agent. `run_tests`
+    executes code the agent wrote, with the self-dev token, so that code
+    can write protected files into its PR branch or call the GitHub API
+    directly. What stops it from reaching `main` is a required CI check and
+    a required human (code-owner) review that the bot identity can't give
+    itself. In either case Self-Dev MCP never holds a Docker socket.
 
 The result is an agent that can fix its own bugs and extend its own fleet,
-while every action that could take the system down or weaken its own
-oversight goes through a human, a second system, or a hardcoded check that
-the agent has no tool capable of editing.
+while every change that could take the system down or weaken its own
+oversight has to pass a human review on GitHub, **provided** the
+[preconditions](SECURITY.md#preconditions-before-pointing-a-live-agent-at-a-repo)
+are in place.
 
 ## Key features
 
 **Implemented today:**
 
-- **Protected-core enforcement** (`services/common/manifest.py`) — a fleet
-  manifest defines which services and paths are off-limits; two paths
-  (`fleet_manifest.yaml` and the manifest loader itself) are protected
-  unconditionally, regardless of what the manifest says. Path checks
-  canonicalize separators and `..` segments and case-fold, so `..`,
-  backslashes, and case tricks can't be used to escape the check.
-- **Self-Dev MCP server** — a [FastMCP](https://github.com/modelcontextprotocol/python-sdk)
+- **Protected-core enforcement** (`services/common/manifest.py`): a fleet
+  manifest defines which services and paths are off-limits. A hardcoded
+  core is protected no matter what the manifest says: the manifest, its
+  loader, `services/__init__.py`, `requirements.txt`, `docker-compose.yml`,
+  `pyproject.toml`, `.gitattributes`, `.gitignore`, and the whole
+  `services/common/` and `.github/` trees. Path checks canonicalize
+  separators, `..` segments, NTFS aliases and case, and are applied to the
+  symlink-resolved target too.
+- **Self-Dev MCP server**: a [FastMCP](https://github.com/modelcontextprotocol/python-sdk)
   server exposing `start_issue`, `read_file`, `write_file`, `run_tests`,
   `submit_pr`, `list_assigned_issues`, and `check_pr_status`. Every write is
   checked against the fleet manifest *and* confined to an ephemeral,
-  per-issue workspace before it touches disk; absolute paths, drive letters,
-  UNC paths, and `..` escapes are refused. A per-issue attempt cap (default
-  5) stops runaway writes; a refused write never consumes an attempt.
-- **No blast radius by design** — the Self-Dev MCP has no Docker socket
-  access, no deploy credentials, and no tool that can merge a pull request.
-  It can open and update PRs; it can never make them live.
+  per-issue workspace before it touches disk. Absolute paths, drive letters,
+  UNC paths, `..` escapes and any `.git` path are refused, and each refusal
+  is audit-logged. Every git call runs with hooks and fsmonitor disabled
+  and pushes with an explicit, non-forcing refspec. A per-issue attempt cap
+  (default 5) stops runaway writes; a refused write never consumes an
+  attempt. These checks bind a cooperative agent; see
+  [the safety model](#the-protected-core-and-the-safety-model) for what
+  backs them up.
+- **Limited blast radius**: the Self-Dev MCP has no Docker socket access,
+  no deploy credentials, and no merge code path. It can open and update
+  PRs. Making them live takes a human review enforced by GitHub branch
+  protection, which is a
+  [precondition](SECURITY.md#preconditions-before-pointing-a-live-agent-at-a-repo),
+  not something this code can enforce.
 - **Deploy Watcher** — polls `main` for new commits, builds each
-  non-protected service from a fresh checkout of that commit, and performs a
+  non-protected service that has a `container` entry in the manifest from a
+  fresh checkout of that commit, and performs a
   blue/green deploy: the new container must pass 3 consecutive health checks
   before it's promoted, and then survives a 30-minute probation window
   during which a single failed check triggers an automatic rollback to the
@@ -89,10 +107,13 @@ the agent has no tool capable of editing.
   dedicated `mcp-fleet` network, each with its own non-root Dockerfile and
   only the credentials/mounts it actually needs (see
   [Quickstart](#quickstart)).
-- **Self-Dev MCP HTTP transport** — `--transport http` serves Self-Dev MCP
-  over SSE (`/sse`, `/messages/`) plus `GET /health` on port 8080, so the
-  Deploy Watcher's blue/green health checks have something to check;
-  `--transport stdio` (the default) is unchanged for local/CLI use.
+- **Self-Dev MCP HTTP transport**: `--transport http` serves Self-Dev MCP
+  over SSE (`/sse`, `/messages/`) plus `GET /health` on port 8080, which
+  the compose healthcheck probes. Tools run in worker threads, so a long
+  `run_tests` never blocks `/health`. `--transport stdio` (the default) is
+  unchanged for local/CLI use. For this release self-dev-mcp is
+  compose-managed (`docker compose up --build`), not redeployed by the
+  Deploy Watcher.
 
 **Roadmap (not built yet — see [Status](#status--roadmap)):**
 
@@ -120,10 +141,9 @@ flowchart TD
         registry["Service registry +<br/>known-good store"]
     end
 
-    subgraph fleet["Fleet containers"]
-        svc1["self-dev-mcp"]
-        svc2["deploy-watcher"]
-        svcN["... other fleet services"]
+    subgraph fleet["Watcher-deployed containers"]
+        svc1["fixture-hello-mcp"]
+        svcN["... other unprotected services<br/>with a container entry"]
     end
 
     issue -->|start_issue| selfdev
@@ -148,11 +168,15 @@ trust boundaries, and the rollback state machine.
 A small set of things can never be edited by the Self-Dev MCP, no matter
 what an agent's reasoning concludes it should do:
 
-- The **fleet manifest** (`fleet_manifest.yaml`) and the **manifest loader**
-  (`services/common/manifest.py`) itself — the file that defines what's
-  off-limits, and the code that reads it, are both hardcoded-protected. The
-  Self-Dev MCP has no tool capable of editing either, even if the manifest
+- The **fleet manifest** (`fleet_manifest.yaml`), the **manifest loader**
+  (`services/common/manifest.py`) and everything else in `services/common/`,
+  plus the build/dependency files (`services/__init__.py`,
+  `requirements.txt`, `docker-compose.yml`, `pyproject.toml`,
+  `.gitattributes`, `.gitignore`) and CI/CODEOWNERS (`.github/`). These are
+  hardcoded-protected, so `write_file` refuses them even if the manifest
   were rewritten to claim they're safe.
+- **Git metadata** (`.git/`): no tool can read or write it, and every git
+  call runs with hooks and fsmonitor disabled and an explicit push refspec.
 - The **Deploy Watcher**, **permission manager** (planned), and **MCP
   gateway** (planned) services — marked `protected: true` in the manifest.
   These hold real authority (Docker socket access, routing, auth), so they
@@ -164,16 +188,17 @@ what an agent's reasoning concludes it should do:
 
 On top of that:
 
-- **Workspace containment** — every `read_file`/`write_file` call is
-  resolved against the current issue's ephemeral workspace; absolute paths,
-  drive letters, UNC paths, and `..` segments are refused before anything
-  touches disk.
-- **No auto-merge, anywhere** — Self-Dev MCP can open and update a pull
-  request; nothing in this codebase can merge one. Merging is a human
-  action, backed by GitHub branch protection and CODEOWNERS — the workflow
-  and CODEOWNERS file exist; enforcement requires branch protection, which
-  the repo admin enables — see
-  [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection).
+- **Workspace containment**: every `read_file`/`write_file`/`run_tests`
+  call is resolved against the current issue's ephemeral workspace.
+  Absolute paths, drive letters, UNC paths, `..` segments, and symlinks or
+  junctions that lead to a protected or outside path are refused before
+  anything touches disk.
+- **No merge code path**: Self-Dev MCP can open and update a pull request,
+  and nothing in this codebase calls a merge API. The self-dev token *could*
+  merge through the API, though, so merge-by-a-human-only is enforced by
+  GitHub branch protection and CODEOWNERS. The workflow and CODEOWNERS file
+  exist; the repo admin enables branch protection (see
+  [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection)).
 - **No deploy authority in Self-Dev MCP** — it holds no Docker socket, no
   deploy credentials, and never imports `docker`. Only the Deploy Watcher —
   a separate, protected service — can build an image or swap a container.
@@ -184,7 +209,17 @@ On top of that:
 
 This is defense in depth, not a single check: even a bug in the manifest
 parser doesn't expose the manifest file or the parser itself, because those
-two paths are hardcoded rather than manifest-driven.
+paths are hardcoded rather than manifest-driven.
+
+**What the tool checks do *not* stop.** They bind a *cooperative* agent.
+`run_tests` executes code the agent wrote, with the self-dev token. That
+code can write any file (protected ones included), which `submit_pr`'s
+`git add -A` then commits to the PR branch, and it can call the GitHub API
+directly. The backstop is GitHub branch protection (required `test` check,
+required review, code-owner review, `enforce_admins`) plus a **separate
+bot identity** for self-dev. With the owner's own PAT, self-dev PRs are
+authored by the owner, and a sole owner can't approve their own PR under
+`enforce_admins`. See [SECURITY.md](SECURITY.md#known-limitations).
 
 ## Quickstart
 
@@ -195,8 +230,11 @@ git clone https://github.com/OmPrakashSingh1704/fleet-mcp.git
 cd fleet-mcp
 python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate on Windows
 pip install -r requirements.txt
-python -m pytest tests -W error::DeprecationWarning
+python -m pytest tests -m "not docker" -v -W error::DeprecationWarning -W error::pytest.PytestUnhandledCoroutineWarning
 ```
+
+(`-m docker` runs the Docker integration test separately; it needs a
+reachable Docker daemon.)
 
 This runs the full suite for the protection engine, the Self-Dev MCP tools,
 and the Deploy Watcher — including the adversarial tests that assert a
@@ -204,11 +242,26 @@ protected-path write is refused and a probation failure triggers rollback.
 
 ### Run the fleet locally
 
+> **Precondition before pointing a live agent at a repo:** enable branch
+> protection on `main` (required `test` check, required review, code-owner
+> review, `enforce_admins`) **and** give self-dev its own bot identity (a
+> machine user or GitHub App), not your own PAT. On a private repo, branch
+> protection needs GitHub Pro, Team or Enterprise. See
+> [SECURITY.md](SECURITY.md#preconditions-before-pointing-a-live-agent-at-a-repo).
+> Running the stack with placeholder values to look around is fine.
+
 ```bash
 cp .env.example .env
-# edit .env: set GITHUB_TOKEN, GITHUB_REPO_FULL_NAME, REPO_REMOTE, SELF_DEV_REPO_REMOTE
-docker compose up
+# edit .env: set SELF_DEV_GITHUB_TOKEN, WATCHER_GITHUB_TOKEN,
+# GITHUB_REPO_FULL_NAME, REPO_REMOTE, SELF_DEV_REPO_REMOTE
+docker compose up --build
 ```
+
+`SELF_DEV_GITHUB_TOKEN` (fine-grained: contents, pull requests and issues
+read/write on this repo) and `WATCHER_GITHUB_TOKEN` (contents read-only) are
+separate tokens. The old shared `GITHUB_TOKEN` variable is no longer read.
+Git authenticates with them through a credential helper, so never put a
+token in a remote URL.
 
 This brings up three containers on the `mcp-fleet` network:
 
@@ -217,7 +270,9 @@ This brings up three containers on the `mcp-fleet` network:
 - **self-dev-mcp** — `http://127.0.0.1:8082/health` (bound to loopback only,
   not published to other hosts — see
   [SECURITY.md](SECURITY.md#known-limitations)) — the Self-Dev MCP server
-  over `--transport http`.
+  over `--transport http`. Compose-managed: after merging a change to it,
+  update it with `docker compose up --build self-dev-mcp`. The Deploy
+  Watcher does not redeploy it.
 - **deploy-watcher** — no published port; it only talks outbound to GitHub
   and to the Docker daemon via the mounted `docker.sock`.
 
@@ -226,7 +281,7 @@ With placeholder `.env` values (or real ones that just don't resolve),
 checks still pass — GitHub credentials are only resolved lazily, on the
 first tool call that actually needs them. Any Self-Dev MCP tool that talks
 to GitHub (`list_assigned_issues`, `submit_pr`, `check_pr_status`, ...) will
-return an `"ERROR: ..."` string until `GITHUB_TOKEN` and
+return an `"ERROR: ..."` string until `SELF_DEV_GITHUB_TOKEN` and
 `GITHUB_REPO_FULL_NAME` are set to real values.
 
 ## Repo layout
@@ -245,7 +300,7 @@ tests/                      unit tests, mirroring the services/ layout
 docs/superpowers/specs/     design specs for this system and its extensions
 docs/superpowers/plans/     implementation plans
 fleet_manifest.yaml         the fleet manifest (protected)
-docker-compose.yml          local fleet: mcp-fleet network + all three services
+docker-compose.yml          local fleet: mcp-fleet network + all three services (protected)
 .env.example                template for the .env docker-compose reads secrets from
 ```
 

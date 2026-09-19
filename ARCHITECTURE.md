@@ -70,9 +70,23 @@ the Deploy Watcher pulls in Self-Dev MCP logic or vice versa.
 
 The Self-Dev MCP container is comparatively low-trust by design: it is
 expected to execute code an LLM generated (via `run_tests`), so it is given
-the least authority that still lets it do its job — git and GitHub API
-calls, and file I/O confined to a throwaway workspace. It cannot reach the
-Deploy Watcher's authority by any path this repo defines.
+the least authority that still lets it do its job: git and GitHub API calls
+with its own `SELF_DEV_GITHUB_TOKEN`, and file I/O confined to a throwaway
+workspace under `/app/tmp`. Its app source is root-owned and read-only to
+the `selfdev` user. It holds no Docker socket and no watcher token, so it
+cannot reach the Deploy Watcher's authority by any path this repo defines.
+
+Be precise about what *inside* that container binds an agent. The tool
+checks (`write_file`/`read_file`/`run_tests` path validation) bind a
+**cooperative** agent. Code the agent writes and runs through `run_tests`
+is not bound by them. It runs as `selfdev` with the self-dev token
+reachable, can write any workspace file (protected paths and `.git/`
+included), which `submit_pr`'s `git add -A` commits, and can call the
+GitHub API directly. For a hostile agent the effective boundary is GitHub's:
+branch protection (required `test` check, required review, code-owner
+review, `enforce_admins`) and a separate bot identity for self-dev. See
+[Protected-core enforcement layers](#protected-core-enforcement-layers) and
+[SECURITY.md#known-limitations](SECURITY.md#known-limitations).
 
 A separate, orthogonal boundary is the Self-Dev MCP's HTTP transport
 (`--transport http`, used when it's deployed under `docker-compose.yml`):
@@ -100,9 +114,9 @@ sequenceDiagram
 
     loop up to attempt cap (default 5)
         Agent->>SelfDev: write_file(path, content)
-        SelfDev->>SelfDev: manifest check + workspace containment
-        alt protected path or workspace escape
-            SelfDev-->>Agent: REFUSED (attempt not consumed)
+        SelfDev->>SelfDev: .git check + manifest check (typed and resolved path) + workspace containment
+        alt protected path, .git path, or workspace escape
+            SelfDev-->>Agent: REFUSED (attempt not consumed, audit-logged)
         else attempt cap exhausted
             SelfDev->>GH: comment_on_issue("giving up")
             SelfDev-->>Agent: EXHAUSTED
@@ -110,11 +124,11 @@ sequenceDiagram
             SelfDev-->>Agent: OK
         end
         Agent->>SelfDev: run_tests(service_path)
-        SelfDev-->>Agent: pytest output (informational only)
+        SelfDev-->>Agent: "OK (exit 0)" / "FAILED (exit N)" + pytest output (informational, timeout-bounded)
     end
 
     Agent->>SelfDev: submit_pr(title, body)
-    SelfDev->>GH: commit_all + push + open_pr (idempotent, no force-push)
+    SelfDev->>GH: commit_all + push refs/heads/selfdev/issue-N (explicit refspec, hooks off) + open_pr (idempotent)
     GH-->>SelfDev: PR number
     SelfDev-->>Agent: "opened PR #N"
 
@@ -148,11 +162,40 @@ Key properties enforced in code, not just by convention:
 - `github_client.open_pr` checks for an already-open PR on that branch/base
   before creating one — idempotent by construction, not by luck.
 - Nothing in `services/self_dev_mcp/` calls a merge API. The only GitHub
-  write operations it performs are `create_pull`, `create_comment`, and
-  push — never a merge.
+  write operations it performs are `create_pull`, `create_comment`, and a
+  push of `refs/heads/selfdev/issue-N` (explicit, non-forcing refspec). The
+  token itself can do more, which is why branch protection is required.
+- Every self-dev `git` call runs with `core.hooksPath=<empty dir>`,
+  `core.fsmonitor=false`, cleared credential helpers plus one env-reading
+  helper, and `GIT_TERMINAL_PROMPT=0` (`git_ops._run_git`).
+- MCP tools are `async` and run their blocking handler in a worker thread
+  (`anyio.to_thread.run_sync`), so `run_tests` (bounded by
+  `SELF_DEV_TEST_TIMEOUT_SECONDS`, default 600) never blocks `/health`.
 - `run_tests` is explicitly informational: the plan and spec are clear that
   the **authoritative** test run is GitHub Actions CI, triggered after push,
   not the local run inside Self-Dev MCP's own container.
+
+## Deployment model
+
+- **Self-Dev MCP is compose-managed only (this release).** Its
+  `fleet_manifest.yaml` entry has no `container`, and the watcher only
+  deploys services that are unprotected *and* have a `container`. An
+  operator updates it with `docker compose up --build self-dev-mcp`. The
+  watcher can't yet inject a service's environment (tokens, remotes) into
+  the containers it starts; that is on the roadmap.
+- **Watcher deploys run beside compose-managed instances.** A watcher deploy
+  of, say, `fixture-hello-mcp` starts `fixture-hello-mcp-<sha>` next to the
+  compose-managed `fixture-hello-mcp` container. It neither stops nor
+  replaces compose's container.
+- **Health-check URL convention.** The watcher health-checks
+  `http://<service>-<sha>:8080/health`, resolved on the `mcp-fleet` network
+  (`DeployManager`'s default `health_url_resolver`). A manifest entry's
+  `health_check` field is **informational only**: it is parsed, but no code
+  uses it.
+- **Per-service locking.** `DeployManager` holds a per-service lock across
+  every "read active → act → write active" section (the deploy flip,
+  `rollback`/`_rollback`'s check-and-perform, and probation's known-good
+  promotion). It is never held across a build or the initial health wait.
 
 ## Rollback state machine
 
@@ -206,41 +249,61 @@ Notes that don't fit in the diagram:
 
 ## Protected-core enforcement layers
 
-Three independent layers, so a bug in any one of them doesn't remove the
-protection:
+Layers 1 and 2 bind a **cooperative** agent, one that edits only through
+the tools. Layer 3 is the only one that binds a **hostile** agent, because
+agent-written code executed by `run_tests` bypasses layers 1 and 2 entirely
+(it can write any workspace file, which `submit_pr` commits with
+`git add -A`, and can call the GitHub API with the self-dev token).
 
-1. **Tool level** (`services/self_dev_mcp/tools.py`, `write_file`) —
-   checks `FleetManifest.is_path_protected` before touching disk, and
-   separately enforces workspace containment
-   (`_resolve_inside_workspace`) so a path can't escape the ephemeral
-   workspace even if it were somehow not manifest-protected. The attempt
-   cap gate (`AttemptTracker.try_record_attempt`) is atomic and is the
-   final check before a write actually happens.
+1. **Tool level** (`services/self_dev_mcp/tools.py`,
+   `_validate_workspace_path`). `write_file` refuses absolute, drive-letter
+   and UNC paths, any path with a `.git` component, and any path the
+   manifest protects. It checks both the typed path and the
+   symlink/junction-resolved target relative to the resolved workspace
+   root, and enforces workspace containment. `read_file` and `run_tests`
+   get the same `.git` and containment checks (`run_tests` also refuses
+   option-like paths). Every refusal is audit-logged on `fleet_mcp.audit`.
+   The attempt cap gate (`AttemptTracker.try_record_attempt`) is atomic and
+   is the final check before a write happens. Git invocations
+   (`git_ops._run_git`) disable hooks and fsmonitor, and `push` uses an
+   explicit non-forcing refspec, so even a tampered `.git/config` can't
+   redirect a push onto `main` or run a hook.
 2. **Manifest level, with hardcoded exceptions**
-   (`services/common/manifest.py`) — `FleetManifest.is_path_protected`
+   (`services/common/manifest.py`). `FleetManifest.is_path_protected`
    protects any path under a service marked `protected: true`, any path
-   listed in a service's `protected_paths`, and unconditionally protects
-   `fleet_manifest.yaml` and `services/common/manifest.py` themselves via
-   `ALWAYS_PROTECTED_PATHS` — regardless of what the loaded manifest says.
-   Path comparison normalizes backslashes to `/`, resolves `..` via
-   `posixpath.normpath`, case-folds, and treats anything that still starts
-   with `..` (escapes the repo root) as protected.
-3. **Platform level, via GitHub** (configured, not code) — branch
-   protection requiring the `test` CI status check and human review, plus a
-   CODEOWNERS entry naming a human owner for protected-core paths. This is
-   the layer that still holds even if layers 1 and 2 had a bug — it's
-   external to this codebase entirely, which is the point. The workflow
-   (`.github/workflows/test.yml`) and CODEOWNERS file (`.github/CODEOWNERS`)
-   exist in this repository; the CODEOWNERS owner is still the `@OWNER`
-   placeholder, and branch protection is not enabled automatically — a repo
-   admin has to replace the placeholder and run the command in
-   [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection)
-   before this layer is actually active.
+   listed in a service's `protected_paths`, and, regardless of what the
+   loaded manifest says, the exact files in `ALWAYS_PROTECTED_PATHS`
+   (`fleet_manifest.yaml`, `services/common/manifest.py`,
+   `services/__init__.py`, `requirements.txt`, `docker-compose.yml`,
+   `pyproject.toml`, `.gitattributes`, `.gitignore`) and the subtrees in
+   `ALWAYS_PROTECTED_PREFIXES` (`services/common/`, `.github/`).
+   `canonicalize_path` normalizes both sides identically: backslashes to
+   `/`, `.`/`..` via `posixpath.normpath`, NTFS `:stream` suffixes and
+   trailing dots/spaces stripped per component, case-folded. Anything that
+   still starts with `..` (escapes the repo root) is protected. The
+   `self-dev-mcp` entry itself stays unprotected, so self-dev can improve
+   its own service.
+3. **Platform level, via GitHub** (configured, not code): branch
+   protection requiring the `test` CI status check, a required review,
+   code-owner review and `enforce_admins`, plus a CODEOWNERS entry naming a
+   human owner for every protected-core path (CODEOWNERS mirrors layer 2; a
+   test enforces it), **and** a separate bot identity for self-dev, so the
+   agent's PRs need someone else's approval. This is the real backstop,
+   and it is external to this codebase. It is not active by default:
+   CODEOWNERS still names the `@OWNER` placeholder, a repo admin has to run
+   the command in
+   [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection),
+   and on a private repo branch protection needs a paid GitHub plan. It is
+   a stated
+   [precondition](SECURITY.md#preconditions-before-pointing-a-live-agent-at-a-repo)
+   for pointing a live agent at a repo.
 
 A fourth, structural layer isn't a "check" at all: the Self-Dev MCP process
-holds no Docker socket and no deploy credentials, so even a complete bypass
-of layers 1–3 inside that process still couldn't build or run a container —
-there's no code path to reach that capability from inside Self-Dev MCP.
+holds no Docker socket and no deploy credentials, so even agent code running
+under `run_tests` can't build or run a container directly. It can still
+propose one, since a merged change to an unprotected service with a
+`container` entry is deployed by the watcher. That is why layer 3's human
+review matters.
 
 ## Service isolation
 
