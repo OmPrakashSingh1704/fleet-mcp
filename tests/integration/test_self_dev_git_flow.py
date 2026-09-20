@@ -17,28 +17,28 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from fleetmcp.common.manifest import FleetManifest
-from fleetmcp.self_dev_mcp import git_ops
-from fleetmcp.self_dev_mcp.attempt_tracker import AttemptTracker
-from fleetmcp.self_dev_mcp.server import (
+from flotilla_mcp.common.manifest import FleetManifest
+from flotilla_mcp.self_dev_mcp import git_ops
+from flotilla_mcp.self_dev_mcp.attempt_tracker import AttemptTracker
+from flotilla_mcp.self_dev_mcp.server import (
     ServerDependencies,
     handle_read_file,
     handle_start_issue,
     handle_submit_pr,
     handle_write_file,
 )
-from fleetmcp.self_dev_mcp.tools import ProtectedPathError, write_file
+from flotilla_mcp.self_dev_mcp.tools import ProtectedPathError, write_file
 
 MANIFEST_YAML = (
     "services:\n"
     "  deploy-watcher:\n"
-    "    path: fleetmcp/deploy_watcher\n"
+    "    path: flotilla_mcp/deploy_watcher\n"
     "    protected: true\n"
 )
 
-PROTECTED_RELATIVE_PATH = "fleetmcp/deploy_watcher/deploy_manager.py"
+PROTECTED_RELATIVE_PATH = "flotilla_mcp/deploy_watcher/deploy_manager.py"
 PROTECTED_ORIGINAL_CONTENT = "# real deploy watcher code\n"
-LEGITIMATE_RELATIVE_PATH = "fleetmcp/fixture_hello_mcp/server.py"
+LEGITIMATE_RELATIVE_PATH = "flotilla_mcp/fixture_hello_mcp/server.py"
 
 
 def _run_git(args: list[str], cwd) -> subprocess.CompletedProcess:
@@ -49,7 +49,7 @@ def _run_git(args: list[str], cwd) -> subprocess.CompletedProcess:
 
 def _init_bare_remote_with_manifest(tmp_path) -> str:
     """Seed a real bare repo (the "GitHub remote") with a manifest that
-    marks fleetmcp/deploy_watcher protected, plus a file under it.
+    marks flotilla_mcp/deploy_watcher protected, plus a file under it.
     """
     remote_dir = tmp_path / "remote.git"
     # Force the bare repo's default branch to "main" regardless of the
@@ -64,8 +64,8 @@ def _init_bare_remote_with_manifest(tmp_path) -> str:
     _run_git(["config", "user.email", "seed@example.com"], cwd=seed_dir)
     _run_git(["config", "user.name", "Seed"], cwd=seed_dir)
     (seed_dir / "fleet_manifest.yaml").write_text(MANIFEST_YAML)
-    (seed_dir / "fleetmcp" / "deploy_watcher").mkdir(parents=True)
-    (seed_dir / "fleetmcp" / "deploy_watcher" / "deploy_manager.py").write_text(PROTECTED_ORIGINAL_CONTENT)
+    (seed_dir / "flotilla_mcp" / "deploy_watcher").mkdir(parents=True)
+    (seed_dir / "flotilla_mcp" / "deploy_watcher" / "deploy_manager.py").write_text(PROTECTED_ORIGINAL_CONTENT)
     _run_git(["add", "-A"], cwd=seed_dir)
     _run_git(["commit", "-m", "seed"], cwd=seed_dir)
     _run_git(["branch", "-M", "main"], cwd=seed_dir)
@@ -175,7 +175,7 @@ def test_followup_checkout_remote_branch_and_second_commit(tmp_path):
 
     write_file(
         str(fresh_workspace),
-        "fleetmcp/fixture_hello_mcp/second_file.py",
+        "flotilla_mcp/fixture_hello_mcp/second_file.py",
         "# a second real fix\n",
         manifest,
         "issue-1",
@@ -189,7 +189,7 @@ def test_followup_checkout_remote_branch_and_second_commit(tmp_path):
     _checkout(verify_dir, "selfdev/issue-1")
 
     assert (verify_dir / LEGITIMATE_RELATIVE_PATH).read_text() == "# a real fix\n"
-    assert (verify_dir / "fleetmcp" / "fixture_hello_mcp" / "second_file.py").read_text() == "# a second real fix\n"
+    assert (verify_dir / "flotilla_mcp" / "fixture_hello_mcp" / "second_file.py").read_text() == "# a second real fix\n"
     assert (verify_dir / PROTECTED_RELATIVE_PATH).read_text() == PROTECTED_ORIGINAL_CONTENT
     assert git_ops.current_commit_sha(str(verify_dir)) == second_sha
 
@@ -290,7 +290,7 @@ def test_c1_raw_malicious_config_and_hooks_cannot_move_main_or_run_code(tmp_path
     assert hook_markers["pre-commit"].exists()
     hook_markers["pre-commit"].unlink()
 
-    (workspace / "fleetmcp" / "fixture_hello_mcp").mkdir(parents=True, exist_ok=True)
+    (workspace / "flotilla_mcp" / "fixture_hello_mcp").mkdir(parents=True, exist_ok=True)
     (workspace / LEGITIMATE_RELATIVE_PATH).write_text("# fix\n")
     sha = git_ops.commit_all(str(workspace), "fix")
     git_ops.push(str(workspace), "selfdev/issue-1")

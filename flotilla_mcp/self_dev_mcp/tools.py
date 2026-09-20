@@ -3,8 +3,8 @@ from __future__ import annotations
 import os
 import subprocess
 
-from fleetmcp.common.manifest import FleetManifest, canonicalize_path
-from fleetmcp.self_dev_mcp.attempt_tracker import AttemptTracker, AttemptsExhaustedError
+from flotilla_mcp.common.manifest import FleetManifest, canonicalize_path
+from flotilla_mcp.self_dev_mcp.attempt_tracker import AttemptTracker, AttemptsExhaustedError
 
 DEFAULT_TEST_TIMEOUT_SECONDS = 600.0
 
@@ -80,7 +80,7 @@ def _validate_workspace_path(
         raise ProtectedPathError(f"refused path escaping workspace: {relative_path!r}")
 
     # The lexical checks above see only the path as typed. A symlink or
-    # junction inside the workspace (e.g. innocent -> fleetmcp/deploy_watcher)
+    # junction inside the workspace (e.g. innocent -> flotilla_mcp/deploy_watcher)
     # makes the real target differ, so re-check what will actually be touched.
     resolved_relative = os.path.relpath(target_path, workspace_root).replace("\\", "/")
     if _has_git_component(resolved_relative):

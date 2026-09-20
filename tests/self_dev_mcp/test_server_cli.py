@@ -1,7 +1,7 @@
 """main()'s friendly first-run failure handling -- see RELEASING.md's
 "friendly first-run failures" note and CHANGELOG's [Unreleased] entry.
 
-A fresh `pip install fleetmcp` / `uvx fleetmcp` user with no manifest and no
+A fresh `pip install flotilla-mcp` / `uvx flotilla-mcp` user with no manifest and no
 env configured should get an actionable one/two-line stderr message and
 exit 1, never a raw traceback out of site-packages.
 """
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from fleetmcp.self_dev_mcp import server
+from flotilla_mcp.self_dev_mcp import server
 
 _REQUIRED_ENV = ("SELF_DEV_REPO_REMOTE", "SELF_DEV_GITHUB_TOKEN", "GITHUB_REPO_FULL_NAME")
 

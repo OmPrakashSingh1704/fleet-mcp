@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-from fleetmcp.deploy_watcher import cli
+from flotilla_mcp.deploy_watcher import cli
 
 
 def test_cli_without_docker_exits_with_extra_hint(monkeypatch, capsys):
@@ -20,7 +20,7 @@ def test_cli_without_docker_exits_with_extra_hint(monkeypatch, capsys):
     with pytest.raises(SystemExit) as exc:
         cli.main([])
     assert exc.value.code == 2
-    assert 'pip install "fleetmcp[watcher]"' in capsys.readouterr().err
+    assert 'pip install "flotilla-mcp[watcher]"' in capsys.readouterr().err
 
 
 def test_cli_help_exits_zero(capsys):

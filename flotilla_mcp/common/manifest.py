@@ -9,8 +9,8 @@ import yaml
 # what fleet_manifest.yaml says. Mirrored in .github/CODEOWNERS.
 ALWAYS_PROTECTED_PATHS = frozenset({
     "fleet_manifest.yaml",
-    "fleetmcp/common/manifest.py",
-    "fleetmcp/__init__.py",
+    "flotilla_mcp/common/manifest.py",
+    "flotilla_mcp/__init__.py",
     "requirements.txt",
     "requirements-dev.txt",
     "docker-compose.yml",
@@ -23,7 +23,7 @@ ALWAYS_PROTECTED_PATHS = frozenset({
 # (the directory itself, and everything under it). Mirrored in
 # .github/CODEOWNERS.
 ALWAYS_PROTECTED_PREFIXES = frozenset({
-    "fleetmcp/common/",
+    "flotilla_mcp/common/",
     ".github/",
 })
 

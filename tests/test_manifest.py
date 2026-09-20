@@ -1,6 +1,6 @@
 import textwrap
 
-from fleetmcp.common.manifest import FleetManifest
+from flotilla_mcp.common.manifest import FleetManifest
 
 
 def _write_manifest(tmp_path, content: str) -> str:
@@ -13,22 +13,22 @@ def test_protected_service_blocks_all_paths_under_it(tmp_path):
     path = _write_manifest(tmp_path, """
         services:
           deploy-watcher:
-            path: fleetmcp/deploy_watcher
+            path: flotilla_mcp/deploy_watcher
             protected: true
     """)
     manifest = FleetManifest.load(path)
-    assert manifest.is_path_protected("fleetmcp/deploy_watcher/deploy_manager.py")
+    assert manifest.is_path_protected("flotilla_mcp/deploy_watcher/deploy_manager.py")
 
 
 def test_unprotected_service_path_is_allowed(tmp_path):
     path = _write_manifest(tmp_path, """
         services:
           fixture-hello-mcp:
-            path: fleetmcp/fixture_hello_mcp
+            path: flotilla_mcp/fixture_hello_mcp
             protected: false
     """)
     manifest = FleetManifest.load(path)
-    assert not manifest.is_path_protected("fleetmcp/fixture_hello_mcp/server.py")
+    assert not manifest.is_path_protected("flotilla_mcp/fixture_hello_mcp/server.py")
 
 
 def test_fleet_manifest_yaml_itself_is_always_protected(tmp_path):
@@ -40,28 +40,28 @@ def test_fleet_manifest_yaml_itself_is_always_protected(tmp_path):
 def test_manifest_loader_module_is_always_protected(tmp_path):
     path = _write_manifest(tmp_path, "services: {}")
     manifest = FleetManifest.load(path)
-    assert manifest.is_path_protected("fleetmcp/common/manifest.py")
+    assert manifest.is_path_protected("flotilla_mcp/common/manifest.py")
 
 
 def test_specific_protected_path_within_unprotected_service(tmp_path):
     path = _write_manifest(tmp_path, """
         services:
           self-dev-mcp:
-            path: fleetmcp/self_dev_mcp
+            path: flotilla_mcp/self_dev_mcp
             protected: false
             protected_paths:
-              - fleetmcp/self_dev_mcp/config.py
+              - flotilla_mcp/self_dev_mcp/config.py
     """)
     manifest = FleetManifest.load(path)
-    assert manifest.is_path_protected("fleetmcp/self_dev_mcp/config.py")
-    assert not manifest.is_path_protected("fleetmcp/self_dev_mcp/tools.py")
+    assert manifest.is_path_protected("flotilla_mcp/self_dev_mcp/config.py")
+    assert not manifest.is_path_protected("flotilla_mcp/self_dev_mcp/tools.py")
 
 
 def test_get_and_all_services(tmp_path):
     path = _write_manifest(tmp_path, """
         services:
           fixture-hello-mcp:
-            path: fleetmcp/fixture_hello_mcp
+            path: flotilla_mcp/fixture_hello_mcp
             container: fixture-hello-mcp
             health_check: http://fixture-hello-mcp:8080/health
     """)
@@ -76,12 +76,12 @@ def test_backslash_path_normalization(tmp_path):
     path = _write_manifest(tmp_path, """
         services:
           deploy-watcher:
-            path: fleetmcp/deploy_watcher
+            path: flotilla_mcp/deploy_watcher
             protected: true
     """)
     manifest = FleetManifest.load(path)
     # Windows-style path with backslashes should be normalized and recognized as protected
-    assert manifest.is_path_protected("fleetmcp\\deploy_watcher\\file.py")
+    assert manifest.is_path_protected("flotilla_mcp\\deploy_watcher\\file.py")
 
 
 def test_case_insensitive_always_protected_paths(tmp_path):
@@ -90,8 +90,8 @@ def test_case_insensitive_always_protected_paths(tmp_path):
     # Case variations of always-protected paths should be protected
     assert manifest.is_path_protected("FLEET_MANIFEST.YAML")
     assert manifest.is_path_protected("Fleet_Manifest.Yaml")
-    assert manifest.is_path_protected("FLEETMCP/COMMON/MANIFEST.PY")
-    assert manifest.is_path_protected("Fleetmcp/Common/Manifest.Py")
+    assert manifest.is_path_protected("FLOTILLA_MCP/COMMON/MANIFEST.PY")
+    assert manifest.is_path_protected("Flotilla_Mcp/Common/Manifest.Py")
 
 
 def test_dot_segment_collapsing(tmp_path):
@@ -99,16 +99,16 @@ def test_dot_segment_collapsing(tmp_path):
     manifest = FleetManifest.load(path)
     # Paths with . and .. segments should be canonicalized before comparison
     assert manifest.is_path_protected("./fleet_manifest.yaml")
-    assert manifest.is_path_protected("./fleetmcp/common/manifest.py")
-    assert manifest.is_path_protected("services/../fleetmcp/common/manifest.py")
-    assert manifest.is_path_protected("fleetmcp/./common/manifest.py")
+    assert manifest.is_path_protected("./flotilla_mcp/common/manifest.py")
+    assert manifest.is_path_protected("services/../flotilla_mcp/common/manifest.py")
+    assert manifest.is_path_protected("flotilla_mcp/./common/manifest.py")
 
 
 def test_path_escape_refusal(tmp_path):
     path = _write_manifest(tmp_path, """
         services:
           fixture-hello-mcp:
-            path: fleetmcp/fixture_hello_mcp
+            path: flotilla_mcp/fixture_hello_mcp
             protected: false
     """)
     manifest = FleetManifest.load(path)
@@ -116,21 +116,21 @@ def test_path_escape_refusal(tmp_path):
     # regardless of manifest content — they're escape attempts
     assert manifest.is_path_protected("../../etc/passwd")
     assert manifest.is_path_protected("../../../secret")
-    assert manifest.is_path_protected("fleetmcp/fixture_hello_mcp/../../../../../../etc/passwd")
+    assert manifest.is_path_protected("flotilla_mcp/fixture_hello_mcp/../../../../../../etc/passwd")
 
 
 # --- Final fix wave: I-4 expanded protected core ---
 
 import pytest  # noqa: E402
 
-from fleetmcp.common.manifest import (  # noqa: E402
+from flotilla_mcp.common.manifest import (  # noqa: E402
     ALWAYS_PROTECTED_PATHS,
     ALWAYS_PROTECTED_PREFIXES,
     canonicalize_path,
 )
 
 NEW_EXACT_PATHS = [
-    "fleetmcp/__init__.py",
+    "flotilla_mcp/__init__.py",
     "requirements.txt",
     "docker-compose.yml",
     "pyproject.toml",
@@ -141,7 +141,7 @@ NEW_EXACT_PATHS = [
 
 def test_always_protected_constants_contain_expanded_core():
     assert set(NEW_EXACT_PATHS) <= ALWAYS_PROTECTED_PATHS
-    assert ALWAYS_PROTECTED_PREFIXES == frozenset({"fleetmcp/common/", ".github/"})
+    assert ALWAYS_PROTECTED_PREFIXES == frozenset({"flotilla_mcp/common/", ".github/"})
 
 
 @pytest.mark.parametrize("path", NEW_EXACT_PATHS)
@@ -154,13 +154,13 @@ def test_new_exact_paths_protected_including_variants(tmp_path, path):
 @pytest.mark.parametrize(
     "path",
     [
-        "fleetmcp/common/__init__.py",
-        "fleetmcp/common/new_helper.py",
-        "fleetmcp/common/sub/deep.py",
-        "fleetmcp/common",
-        "FLEETMCP/COMMON/x.py",
-        "fleetmcp\\common\\x.py",
-        "fleetmcp/x/../common/y.py",
+        "flotilla_mcp/common/__init__.py",
+        "flotilla_mcp/common/new_helper.py",
+        "flotilla_mcp/common/sub/deep.py",
+        "flotilla_mcp/common",
+        "FLOTILLA_MCP/COMMON/x.py",
+        "flotilla_mcp\\common\\x.py",
+        "flotilla_mcp/x/../common/y.py",
         ".github/workflows/test.yml",
         ".github/CODEOWNERS",
         ".github",
@@ -177,11 +177,11 @@ def test_prefix_protection_including_case_variants(tmp_path, path):
 @pytest.mark.parametrize(
     "path",
     [
-        "fleetmcp/commonplace/x.py",
-        "fleetmcp/common_extra.py",
+        "flotilla_mcp/commonplace/x.py",
+        "flotilla_mcp/common_extra.py",
         ".githubx/y",
         "docs/.github/x",
-        "fleetmcp/self_dev_mcp/tools.py",
+        "flotilla_mcp/self_dev_mcp/tools.py",
     ],
 )
 def test_prefix_protection_does_not_overmatch(tmp_path, path):
@@ -195,16 +195,16 @@ def test_canonicalize_path_strips_windows_aliases():
     assert canonicalize_path("./x/../Y") == "y"
 
 
-# --- Task 1: services -> fleetmcp rename ---
+# --- Task 1: services -> flotilla_mcp rename ---
 
 
 def test_renamed_package_core_paths_are_always_protected(tmp_path):
     manifest = FleetManifest.load(_write_manifest(tmp_path, "services: {}"))
     for p in [
-        "fleetmcp/common/manifest.py",
-        "fleetmcp/__init__.py",
-        "FleetMCP/Common/x.py",
-        "fleetmcp/common",
+        "flotilla_mcp/common/manifest.py",
+        "flotilla_mcp/__init__.py",
+        "Flotilla_MCP/Common/x.py",
+        "flotilla_mcp/common",
         "requirements-dev.txt",
     ]:
         assert manifest.is_path_protected(p), p
@@ -224,7 +224,7 @@ def test_real_fleet_manifest_self_dev_entry_is_unprotected_and_compose_managed()
     assert self_dev.protected is False
     # I-7: compose-managed only for this release -- the watcher skips it.
     assert self_dev.container is None
-    assert not manifest.is_path_protected("fleetmcp/self_dev_mcp/tools.py")
+    assert not manifest.is_path_protected("flotilla_mcp/self_dev_mcp/tools.py")
 
 
 def test_codeowners_mirrors_every_always_protected_entry():

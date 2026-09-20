@@ -2,10 +2,10 @@ from unittest.mock import MagicMock, patch
 
 from github import Auth
 
-from fleetmcp.deploy_watcher.github_poller import GitHubPoller
+from flotilla_mcp.deploy_watcher.github_poller import GitHubPoller
 
 
-@patch("fleetmcp.deploy_watcher.github_poller.Github")
+@patch("flotilla_mcp.deploy_watcher.github_poller.Github")
 def test_get_latest_commit_sha_reads_branch_head(mock_github_cls):
     mock_repo = MagicMock()
     mock_repo.get_branch.return_value.commit.sha = "sha-1"
@@ -17,7 +17,7 @@ def test_get_latest_commit_sha_reads_branch_head(mock_github_cls):
     mock_repo.get_branch.assert_called_once_with("main")
 
 
-@patch("fleetmcp.deploy_watcher.github_poller.Github")
+@patch("flotilla_mcp.deploy_watcher.github_poller.Github")
 def test_poll_once_returns_sha_only_on_change(mock_github_cls):
     mock_repo = MagicMock()
     mock_repo.get_branch.return_value.commit.sha = "sha-1"
@@ -32,7 +32,7 @@ def test_poll_once_returns_sha_only_on_change(mock_github_cls):
     assert poller.poll_once() == "sha-2"
 
 
-@patch("fleetmcp.deploy_watcher.github_poller.Github")
+@patch("flotilla_mcp.deploy_watcher.github_poller.Github")
 def test_constructs_github_client_with_auth_token_kwarg(mock_github_cls):
     # Controller ruling: never pass the token positionally to Github() --
     # PyGithub 2.4.0 deprecates that and emits a DeprecationWarning. Must

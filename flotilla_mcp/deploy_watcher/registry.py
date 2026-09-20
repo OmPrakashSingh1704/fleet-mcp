@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import threading
 
-from fleetmcp.deploy_watcher.json_store import read_json, write_json_atomic
+from flotilla_mcp.deploy_watcher.json_store import read_json, write_json_atomic
 
 
 class ServiceRegistry:
