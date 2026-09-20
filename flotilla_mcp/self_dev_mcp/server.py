@@ -480,9 +480,10 @@ def build_mcp_app() -> FastMCP:
         """Get the combined CI status for a pull request's head commit, from
         GitHub's Checks API. Returns exactly one of "pending" (no checks yet,
         or some still running), "success" (all checks completed without
-        failure), or "failure" (at least one check failed, was cancelled,
-        timed out, or requires action) -- or a string starting "ERROR:" if the
-        status can't be retrieved (never raises).
+        failure), or "failure" (at least one check reported a non-success
+        conclusion: failed, cancelled, timed out, required action, or failed
+        to start) -- or a string starting "ERROR:" if the status can't be
+        retrieved (never raises).
         """
         return await anyio.to_thread.run_sync(handle_check_pr_status, pr_number, deps)
 
