@@ -11,6 +11,27 @@ minor versions).
 
 Nothing yet.
 
+## [0.1.2] - 2026-09-20
+
+### Added
+
+- Self-Dev MCP's 7 tools (`start_issue`, `read_file`, `write_file`,
+  `run_tests`, `submit_pr`, `list_assigned_issues`, `check_pr_status`) now
+  carry proper MCP tool descriptions and per-parameter descriptions
+  (`typing.Annotated[..., pydantic.Field(description=...)]`), so an MCP
+  client can show a model what each tool does, what constraints bind it
+  (workspace confinement, protected-path refusal, the per-issue attempt
+  cap, never-merge/never-force-push), and that handlers return a string
+  starting `OK`, `REFUSED:`, `EXHAUSTED:`, or `ERROR:` instead of raising.
+  Previously the tools were registered as bare functions with no
+  description at all. A regression test
+  (`tests/self_dev_mcp/test_server.py`) asserts every tool has a
+  description of at least ~80 characters, that no two tools share a
+  description, and that every parameter in every tool's schema has a
+  non-empty description.
+- README gained a "Tools" section summarizing all 7 tools in one line
+  each, consistent with the new descriptions.
+
 ## [0.1.1] - 2026-09-20
 
 ### Added
@@ -297,6 +318,7 @@ See [SECURITY.md](SECURITY.md#known-limitations) and the
 manager, `model-adapters-mcp`, `credentials-manager`, and the Model Manager
 chat flow are not built yet.
 
-[Unreleased]: https://github.com/OmPrakashSingh1704/flotilla-mcp/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/OmPrakashSingh1704/flotilla-mcp/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/OmPrakashSingh1704/flotilla-mcp/releases/tag/v0.1.2
 [0.1.1]: https://github.com/OmPrakashSingh1704/flotilla-mcp/releases/tag/v0.1.1
 [0.1.0]: https://github.com/OmPrakashSingh1704/flotilla-mcp/releases/tag/v0.1.0

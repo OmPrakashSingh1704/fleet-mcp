@@ -1,3 +1,3 @@
 """Flotilla MCP: a self-developing fleet of MCP servers, with guardrails."""
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
