@@ -129,6 +129,24 @@ scripting the command form. The JSON form above is not client-specific —
 paste the same `mcpServers` block into whatever configuration surface your
 `claude` CLI version reads for MCP servers.
 
+### Tools
+
+Self-Dev MCP exposes these 7 tools. Each is documented (description and
+per-parameter descriptions) so an MCP client can surface them to the model
+without extra context; handlers return a string starting `OK`, `REFUSED:`,
+`EXHAUSTED:`, or `ERROR:` instead of raising, so a caller can branch on the
+prefix.
+
+| Tool | Summary |
+| --- | --- |
+| `start_issue` | Clone the target repo into a fresh per-issue workspace and create/resume its `selfdev/issue-N` branch; one active workspace per issue. |
+| `read_file` | Read a file from the issue workspace; paths outside it, with a drive letter, or touching `.git` are refused. |
+| `write_file` | Write a file in the issue workspace; also checked against the fleet manifest's protected paths and a per-issue attempt cap (default 5). |
+| `run_tests` | Run the repo's own pytest inside the workspace with a timeout and return the exit status and output; commits nothing. |
+| `submit_pr` | Commit everything in the workspace, push the branch, open or reuse a PR, then destroy the workspace; never merges, never force-pushes. |
+| `list_assigned_issues` | List open issues carrying the given label, with pull requests excluded. |
+| `check_pr_status` | Get the combined CI state for a PR from the Checks API: `pending`, `success`, or `failure`. |
+
 ## Why Flotilla MCP
 
 Most "self-modifying agent" demos either can't touch production or can touch

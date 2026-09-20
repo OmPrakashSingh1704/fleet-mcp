@@ -460,6 +460,87 @@ def test_build_mcp_app_registers_all_tools(tmp_path, monkeypatch):
     }
 
 
+# --- Regression: every registered tool is properly documented for MCP clients ---
+#
+# MCP clients feed each tool's description and per-parameter descriptions to
+# the model when it chooses (and fills in arguments for) a tool. This guards
+# against the tool set silently regressing to bare, undocumented functions
+# again -- see flotilla_mcp/self_dev_mcp/server.py's @app.tool wrappers for
+# what supplies these (the wrapper's docstring is the description; each
+# parameter's `Annotated[..., pydantic.Field(description=...)]` supplies its
+# per-parameter description; confirmed against the installed mcp==1.2.0's
+# `mcp.server.fastmcp.tools.base.Tool.from_function` and
+# `mcp.server.fastmcp.utilities.func_metadata.func_metadata`).
+
+_EXPECTED_TOOL_NAMES = {
+    "start_issue",
+    "read_file",
+    "write_file",
+    "run_tests",
+    "submit_pr",
+    "list_assigned_issues",
+    "check_pr_status",
+}
+
+_MIN_DESCRIPTION_LENGTH = 80
+
+
+def _build_tools_for_doc_check(tmp_path, monkeypatch):
+    manifest_path = tmp_path / "fleet_manifest.yaml"
+    manifest_path.write_text(
+        "services:\n"
+        "  deploy-watcher:\n"
+        "    path: flotilla_mcp/deploy_watcher\n"
+        "    protected: true\n"
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("SELF_DEV_REPO_REMOTE", "https://example.com/repo.git")
+    monkeypatch.setenv("SELF_DEV_GITHUB_TOKEN", "fake-token")
+    monkeypatch.setenv("GITHUB_REPO_FULL_NAME", "org/repo")
+
+    with patch("flotilla_mcp.self_dev_mcp.server.GitHubClient") as mock_github_client:
+        mock_github_client.return_value = MagicMock()
+
+        from flotilla_mcp.self_dev_mcp.server import build_mcp_app
+
+        app = build_mcp_app()
+        return asyncio.run(app.list_tools())
+
+
+def test_all_tools_have_substantial_unique_descriptions(tmp_path, monkeypatch):
+    tools = _build_tools_for_doc_check(tmp_path, monkeypatch)
+
+    tool_names = {tool.name for tool in tools}
+    assert tool_names == _EXPECTED_TOOL_NAMES
+
+    descriptions = {}
+    for tool in tools:
+        description = tool.description or ""
+        assert len(description) >= _MIN_DESCRIPTION_LENGTH, (
+            f"{tool.name}'s description is only {len(description)} chars "
+            f"(want >= {_MIN_DESCRIPTION_LENGTH}): {description!r}"
+        )
+        descriptions[tool.name] = description
+
+    # No two tools share a description (each dict value is distinct even
+    # though the values could theoretically collide if copy-pasted).
+    assert len(set(descriptions.values())) == len(descriptions)
+
+
+def test_all_tool_parameters_have_descriptions(tmp_path, monkeypatch):
+    tools = _build_tools_for_doc_check(tmp_path, monkeypatch)
+
+    assert tools, "expected at least one registered tool"
+    for tool in tools:
+        properties = (tool.inputSchema or {}).get("properties", {})
+        assert properties, f"{tool.name} has no parameters in its input schema"
+        for param_name, param_schema in properties.items():
+            description = param_schema.get("description") or ""
+            assert description.strip(), (
+                f"{tool.name}'s parameter {param_name!r} has no description: {param_schema!r}"
+            )
+
+
 # --- Ruling 1: HTTP transport (/health + mounted SSE app) ---
 
 

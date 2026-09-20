@@ -8,12 +8,14 @@ import subprocess
 import sys
 import threading
 from dataclasses import dataclass, field
+from typing import Annotated
 
 import anyio.to_thread
 import requests
 from github import GithubException
 from mcp.server.fastmcp import FastMCP
 from mcp.server.sse import SseServerTransport
+from pydantic import Field
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
@@ -333,31 +335,155 @@ def build_mcp_app() -> FastMCP:
     # the event loop -- which also serves /health.
 
     @app.tool(name="start_issue")
-    async def start_issue(issue_number: int) -> str:
+    async def start_issue(
+        issue_number: Annotated[
+            int, Field(description="The GitHub issue number to start work on.")
+        ],
+    ) -> str:
+        """Begin work on a GitHub issue: clone the target repository into a fresh,
+        isolated per-issue workspace and create (or, if one already exists,
+        resume) a `selfdev/issue-<issue_number>` branch there. Call this first,
+        before read_file, write_file, run_tests, or submit_pr -- those tools all
+        operate on the workspace this creates. Only one active workspace is
+        allowed per issue; calling this again for an issue that already has one
+        returns an error instead of clobbering it. Returns the branch name as a
+        plain string on success, or a string starting "ERROR:" on failure
+        (never raises).
+        """
         return await anyio.to_thread.run_sync(handle_start_issue, issue_number, deps)
 
     @app.tool(name="read_file")
-    async def read_file(issue_number: int, relative_path: str) -> str:
+    async def read_file(
+        issue_number: Annotated[
+            int,
+            Field(description="The issue number whose active workspace to read from; must have been started with start_issue first."),
+        ],
+        relative_path: Annotated[
+            str,
+            Field(
+                description=(
+                    "Path to the file, relative to the issue workspace root. "
+                    "Absolute paths, drive letters, UNC paths, '..'-escaping "
+                    "paths, and any path touching '.git' are refused."
+                )
+            ),
+        ],
+    ) -> str:
+        """Read a file's contents from the workspace start_issue created for this
+        issue. `relative_path` is resolved relative to that workspace and is
+        refused if it is absolute, has a drive letter, is a UNC path, escapes
+        the workspace via '..', or touches '.git'. Returns the file contents as
+        a plain string on success, "REFUSED: ..." if the path is blocked, or
+        "ERROR: ..." for other failures (e.g. no active workspace, file not
+        found) -- never raises.
+        """
         return await anyio.to_thread.run_sync(handle_read_file, issue_number, relative_path, deps)
 
     @app.tool(name="write_file")
-    async def write_file(issue_number: int, relative_path: str, content: str) -> str:
+    async def write_file(
+        issue_number: Annotated[
+            int,
+            Field(description="The issue number whose active workspace to write into; must have been started with start_issue first."),
+        ],
+        relative_path: Annotated[
+            str,
+            Field(
+                description=(
+                    "Path to the file to write, relative to the issue workspace "
+                    "root. Absolute paths, drive letters, UNC paths, "
+                    "'..'-escaping paths, '.git' paths, and paths protected by "
+                    "the fleet manifest are refused."
+                )
+            ),
+        ],
+        content: Annotated[
+            str,
+            Field(description="Full text content to write to the file, replacing any existing content."),
+        ],
+    ) -> str:
+        """Create or overwrite a file inside the workspace start_issue created for
+        this issue. `relative_path` is checked the same way as read_file
+        (no absolute/drive/UNC/'..'/'.git' paths) and is additionally checked
+        against the fleet manifest's protected paths. Writes are capped per
+        issue (default 5 attempts, configurable via SELF_DEV_MAX_ATTEMPTS); a
+        refused write does not count against that cap. Returns "OK" on success,
+        "REFUSED: ..." for a blocked path, "EXHAUSTED: ..." once the attempt
+        cap is reached, or "ERROR: ..." for other failures -- never raises.
+        """
         return await anyio.to_thread.run_sync(handle_write_file, issue_number, relative_path, content, deps)
 
     @app.tool(name="run_tests")
-    async def run_tests(issue_number: int, service_relative_path: str) -> str:
+    async def run_tests(
+        issue_number: Annotated[
+            int,
+            Field(description="The issue number whose active workspace to run tests in; must have been started with start_issue first."),
+        ],
+        service_relative_path: Annotated[
+            str,
+            Field(
+                description=(
+                    "Path to the service or test target, relative to the issue "
+                    "workspace root, passed to `pytest -- <path>`. Refused if "
+                    "it starts with '-' (could be parsed as a pytest option), "
+                    "escapes the workspace, or touches '.git'."
+                )
+            ),
+        ],
+    ) -> str:
+        """Run the target repository's own pytest suite for one service, inside
+        the issue's workspace, subject to a timeout. This only executes tests
+        and reports the result -- it never commits or modifies anything.
+        Returns a string starting "OK" or "FAILED" followed by the exit code
+        and captured stdout/stderr, "REFUSED: ..." if the path is option-like,
+        escapes the workspace, or touches '.git', or "ERROR: ..." if the run
+        times out or fails to start -- never raises.
+        """
         return await anyio.to_thread.run_sync(handle_run_tests, issue_number, service_relative_path, deps)
 
     @app.tool(name="submit_pr")
-    async def submit_pr(issue_number: int, title: str, body: str) -> str:
+    async def submit_pr(
+        issue_number: Annotated[
+            int,
+            Field(description="The issue number whose active workspace to submit; must have been started with start_issue first."),
+        ],
+        title: Annotated[str, Field(description="Commit message and pull request title.")],
+        body: Annotated[str, Field(description="Pull request description body.")],
+    ) -> str:
+        """Finish work on an issue: commit everything currently in the workspace,
+        push the `selfdev/issue-<issue_number>` branch, and open a new pull
+        request or reuse an already-open one for that branch -- then destroy
+        the workspace. It can never merge a pull request and never
+        force-pushes. Requires a GitHub repository to be configured. Returns
+        "opened PR #<number>" on success, or a string starting "ERROR:" on
+        failure (the workspace is kept on failure so a retry doesn't need
+        start_issue again) -- never raises.
+        """
         return await anyio.to_thread.run_sync(handle_submit_pr, issue_number, title, body, deps)
 
     @app.tool(name="list_assigned_issues")
-    async def list_assigned_issues(label: str = "self-dev") -> str:
+    async def list_assigned_issues(
+        label: Annotated[str, Field(description="Issue label to filter by.")] = "self-dev",
+    ) -> str:
+        """List open GitHub issues carrying the given label; pull requests are
+        excluded even though GitHub's issues API would otherwise include them.
+        Use this to discover work before calling start_issue. Returns one
+        "#<number> <title>" line per matching issue, a "No open issues labeled
+        <label>" message if none match, or a string starting "ERROR:" on
+        failure -- never raises.
+        """
         return await anyio.to_thread.run_sync(handle_list_assigned_issues, deps, label)
 
     @app.tool(name="check_pr_status")
-    async def check_pr_status(pr_number: int) -> str:
+    async def check_pr_status(
+        pr_number: Annotated[int, Field(description="The pull request number to check.")],
+    ) -> str:
+        """Get the combined CI status for a pull request's head commit, from
+        GitHub's Checks API. Returns exactly one of "pending" (no checks yet,
+        or some still running), "success" (all checks completed without
+        failure), or "failure" (at least one check failed, was cancelled,
+        timed out, or requires action) -- or a string starting "ERROR:" if the
+        status can't be retrieved (never raises).
+        """
         return await anyio.to_thread.run_sync(handle_check_pr_status, pr_number, deps)
 
     return app
