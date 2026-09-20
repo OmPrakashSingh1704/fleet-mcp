@@ -842,3 +842,101 @@ def test_handle_start_issue_concurrent_calls_clone_once(tmp_path):
     assert second == "ERROR: issue 1 already has an active workspace"
     assert results == ["selfdev/issue-1"]
     assert len(clone_calls) == 1
+
+
+# --- Zero-config startup: non-GitHub remote / no github_repo_full_name ---
+
+
+def _deps_no_github(tmp_path):
+    return ServerDependencies(
+        repo_remote="https://example.com/repo.git",
+        manifest=_empty_manifest(tmp_path),
+        tracker=AttemptTracker(max_attempts=5),
+        github_client=None,
+        workspaces={},
+    )
+
+
+def test_handle_list_assigned_issues_no_github_returns_error(tmp_path):
+    from flotilla_mcp.self_dev_mcp.server import NO_GITHUB_ERROR
+
+    deps = _deps_no_github(tmp_path)
+
+    assert handle_list_assigned_issues(deps) == NO_GITHUB_ERROR
+
+
+def test_handle_check_pr_status_no_github_returns_error(tmp_path):
+    from flotilla_mcp.self_dev_mcp.server import NO_GITHUB_ERROR
+
+    deps = _deps_no_github(tmp_path)
+
+    assert handle_check_pr_status(1, deps) == NO_GITHUB_ERROR
+
+
+def test_handle_submit_pr_no_github_returns_error_without_committing_or_pushing(tmp_path):
+    from flotilla_mcp.self_dev_mcp.server import NO_GITHUB_ERROR
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    deps = _deps_no_github(tmp_path)
+    deps.workspaces["1"] = str(workspace)
+
+    with patch("flotilla_mcp.self_dev_mcp.server.commit_all") as mock_commit_all, patch(
+        "flotilla_mcp.self_dev_mcp.server.push"
+    ) as mock_push:
+        result = handle_submit_pr(1, "title", "body", deps)
+
+    assert result == NO_GITHUB_ERROR
+    mock_commit_all.assert_not_called()
+    mock_push.assert_not_called()
+    # Workspace is kept, exactly like every other submit_pr failure path.
+    assert deps.workspaces["1"] == str(workspace)
+
+
+def test_handle_write_file_exhausted_no_github_reports_no_github_error(tmp_path):
+    from flotilla_mcp.self_dev_mcp.server import NO_GITHUB_ERROR
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    deps = _deps_no_github(tmp_path)
+    deps.workspaces["1"] = str(workspace)
+    deps.tracker = AttemptTracker(max_attempts=1)
+    handle_write_file(1, "a.py", "1", deps)
+
+    result = handle_write_file(1, "b.py", "2", deps)
+
+    assert result.startswith("EXHAUSTED")
+    assert NO_GITHUB_ERROR in result
+
+
+def test_build_mcp_app_starts_with_non_github_remote_and_no_full_name(tmp_path, monkeypatch):
+    # Zero-config startup against a non-GitHub remote: the server must still
+    # start, and GitHubClient must never be constructed (no network I/O, and
+    # nothing to construct it against).
+    manifest_path = tmp_path / "fleet_manifest.yaml"
+    manifest_path.write_text("services: {}\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("SELF_DEV_REPO_REMOTE", "https://gitlab.com/org/repo.git")
+    monkeypatch.setenv("SELF_DEV_GITHUB_TOKEN", "fake-token")
+    monkeypatch.delenv("GITHUB_REPO_FULL_NAME", raising=False)
+
+    with patch("flotilla_mcp.self_dev_mcp.server.GitHubClient") as mock_github_client:
+        from flotilla_mcp.self_dev_mcp.server import NO_GITHUB_ERROR, build_mcp_app
+
+        app = build_mcp_app()
+        tools = asyncio.run(app.list_tools())
+
+        list_issues_tool = app._tool_manager.get_tool("list_assigned_issues")
+        result = asyncio.run(list_issues_tool.fn())
+
+    mock_github_client.assert_not_called()
+    assert result == NO_GITHUB_ERROR
+    assert {tool.name for tool in tools} == {
+        "start_issue",
+        "read_file",
+        "write_file",
+        "run_tests",
+        "submit_pr",
+        "list_assigned_issues",
+        "check_pr_status",
+    }

@@ -279,6 +279,16 @@ your own risk assessment, not as an invitation to assume they're fixed:
   Per-repository protected-path configuration (so the hardcoded list can
   describe the target repo's own layout, not this one's) is roadmap, not
   built yet.
+- **Running without a fleet manifest leaves only the built-in protections.**
+  If `FLEET_MANIFEST_PATH` is unset and no `fleet_manifest.yaml` is found (in
+  the current directory or the git repo root), Self-Dev MCP starts with an
+  empty manifest instead of failing. `ALWAYS_PROTECTED_PATHS` and
+  `ALWAYS_PROTECTED_PREFIXES` (and the `.git`/absolute-path/`..`-escape
+  checks, which don't depend on the manifest at all) still apply, but no
+  service is `protected: true` and no `protected_paths` exist — nothing in
+  the target repo beyond the hardcoded list is service-protected until a
+  manifest is added. The server logs one WARNING naming the paths it
+  checked when this happens; that warning is the signal to look for.
 - **Probation doesn't survive a watcher restart.** The probation monitor is
   an in-process thread. If the Deploy Watcher process restarts mid-probation,
   the newly-promoted container keeps serving traffic but is no longer being
