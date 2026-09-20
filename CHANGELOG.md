@@ -11,13 +11,13 @@ minor versions).
 
 ### Added
 
-- `fleetmcp/common/manifest.py`: `FleetManifest`, the fleet manifest loader
+- `flotilla_mcp/common/manifest.py`: `FleetManifest`, the fleet manifest loader
   and protected-path engine. `fleet_manifest.yaml` and the manifest loader
   itself are protected unconditionally, independent of manifest content.
   Path checks canonicalize separators, resolve `..` segments, and
   case-fold; a path that escapes the repo root after normalization is
   always treated as protected.
-- `fleetmcp/self_dev_mcp/`: the Self-Dev MCP server (FastMCP), exposing
+- `flotilla_mcp/self_dev_mcp/`: the Self-Dev MCP server (FastMCP), exposing
   `start_issue`, `read_file`, `write_file`, `run_tests`, `submit_pr`,
   `list_assigned_issues`, and `check_pr_status`.
   - Writes and reads are confined to an ephemeral per-issue workspace;
@@ -34,7 +34,7 @@ minor versions).
     requests.
   - No Docker socket access, no deploy credentials, no ability to merge a
     pull request.
-- `fleetmcp/deploy_watcher/`: the Deploy Watcher.
+- `flotilla_mcp/deploy_watcher/`: the Deploy Watcher.
   - Polls `main` for new commits, syncs a git checkout of the new commit
     (redacting the remote URL, which may embed a token, from any error),
     and builds each non-protected service's image from that checkout
@@ -68,35 +68,35 @@ minor versions).
 - Project logo (`assets/logo.svg`, `assets/logo-mark.svg`, and
   `assets/logo-dark.svg` for a dark-mode variant, switched via a README
   `<picture>` element based on `prefers-color-scheme`).
-- Project metadata in `pyproject.toml` (package name `fleetmcp`,
+- Project metadata in `pyproject.toml` (package name `flotilla-mcp`,
   description, license, readme).
-- `fleetmcp/fixture_hello_mcp/`: a minimal Flask service (`GET /health`,
+- `flotilla_mcp/fixture_hello_mcp/`: a minimal Flask service (`GET /health`,
   `GET /`) used as the Deploy Watcher's local build/run/health-check smoke
   test target.
-- Per-service Dockerfiles (`fleetmcp/fixture_hello_mcp/Dockerfile`,
-  `fleetmcp/self_dev_mcp/Dockerfile`, `fleetmcp/deploy_watcher/Dockerfile`),
+- Per-service Dockerfiles (`flotilla_mcp/fixture_hello_mcp/Dockerfile`,
+  `flotilla_mcp/self_dev_mcp/Dockerfile`, `flotilla_mcp/deploy_watcher/Dockerfile`),
   `docker-compose.yml` (the `mcp-fleet` network plus all three services),
   and a committed `.env.example` template for the secrets `docker-compose.yml`
   reads via `${VAR}` interpolation from a gitignored `.env`.
 - Self-Dev MCP `--transport {stdio,http}` (default `stdio`): `http` serves
   the server over SSE (`/sse`, `/messages/`) plus `GET /health` on port
   8080, so its container can be health-checked.
-- `fleetmcp/deploy_watcher/entrypoint.sh`: a runtime entrypoint that starts
+- `flotilla_mcp/deploy_watcher/entrypoint.sh`: a runtime entrypoint that starts
   the watcher container as root, joins its non-root `watcher` user to
   whatever group actually owns the host's `/var/run/docker.sock` (its GID
   varies by host and isn't known at image build time), and then drops to
   `watcher` via `setpriv` before running the real command.
-- `fleetmcp/self_dev_mcp/github_client.py`: `GitHubClient` now resolves the
+- `flotilla_mcp/self_dev_mcp/github_client.py`: `GitHubClient` now resolves the
   GitHub repo lazily, on first use, instead of in `__init__` — a bad or
   unreachable `GITHUB_TOKEN` no longer crashes the process at startup
   (previously this made Self-Dev MCP's HTTP server fail to bind before
   `/health` could ever respond); it now surfaces as an `"ERROR: ..."` string
   from the first tool call that needs GitHub.
 - `.github/CODEOWNERS`, covering the protected core
-  (`fleet_manifest.yaml`, `fleetmcp/common/manifest.py`,
-  `fleetmcp/deploy_watcher/`, the planned `fleetmcp/permission_manager/`
-  and `fleetmcp/mcp_gateway/` directories, `/.github/`, and `SECURITY.md`)
-  and now also `/fleetmcp/self_dev_mcp/` (Self-Dev MCP's own guard code is
+  (`fleet_manifest.yaml`, `flotilla_mcp/common/manifest.py`,
+  `flotilla_mcp/deploy_watcher/`, the planned `flotilla_mcp/permission_manager/`
+  and `flotilla_mcp/mcp_gateway/` directories, `/.github/`, and `SECURITY.md`)
+  and now also `/flotilla_mcp/self_dev_mcp/` (Self-Dev MCP's own guard code is
   not protected in `fleet_manifest.yaml`, so the agent may propose changes
   to it, but such changes weaken the checks that constrain it). It names
   the repo owner, `@OmPrakashSingh1704`; code-owner review still isn't
@@ -119,14 +119,14 @@ minor versions).
   that exceeds it returns `"ERROR: tests timed out after Ns"`.
 - Policy-denial audit log: every `REFUSED`/`EXHAUSTED` decision in
   `write_file`, `read_file` and `run_tests` is logged at WARNING on the
-  `fleet_mcp.audit` logger (stderr) as
+  `flotilla_mcp.audit` logger (stderr) as
   `policy-denial tool=… issue=… path=<repr> reason=…`. Content is never
   logged.
 - `restart: unless-stopped` on every compose service.
-- PyPI packaging: the `fleetmcp` distribution, built with hatchling, with
-  console scripts `fleetmcp` and `fleetmcp-self-dev` (both
-  `fleetmcp.self_dev_mcp.server:main`) and `fleetmcp-watcher`
-  (`fleetmcp.deploy_watcher.cli:main`, requiring the optional `[watcher]`
+- PyPI packaging: the `flotilla-mcp` distribution, built with hatchling, with
+  console scripts `flotilla-mcp` and `flotilla-self-dev` (both
+  `flotilla_mcp.self_dev_mcp.server:main`) and `flotilla-watcher`
+  (`flotilla_mcp.deploy_watcher.cli:main`, requiring the optional `[watcher]`
   extra for its Docker SDK dependency).
 - `FLEET_MANIFEST_PATH`: overrides where the Self-Dev MCP server looks for
   the fleet manifest (default `fleet_manifest.yaml`).
@@ -160,12 +160,12 @@ minor versions).
   `refs/heads/selfdev/issue-N:refs/heads/selfdev/issue-N`. A tampered
   `.git/config` can no longer move `main` or run a hook.
 - Symlink/junction bypass closed: `write_file` re-checks the manifest
-  against the symlink-resolved target, so `innocent -> fleetmcp/deploy_watcher`
+  against the symlink-resolved target, so `innocent -> flotilla_mcp/deploy_watcher`
   can't be used to write a protected file.
 - Protected core expanded: `ALWAYS_PROTECTED_PATHS` adds
-  `fleetmcp/__init__.py`, `requirements.txt`, `docker-compose.yml`,
+  `flotilla_mcp/__init__.py`, `requirements.txt`, `docker-compose.yml`,
   `pyproject.toml`, `.gitattributes` and `.gitignore`. A new
-  `ALWAYS_PROTECTED_PREFIXES` protects `fleetmcp/common/` and `.github/`.
+  `ALWAYS_PROTECTED_PREFIXES` protects `flotilla_mcp/common/` and `.github/`.
   Path canonicalization also strips NTFS stream suffixes and trailing
   dots/spaces. CODEOWNERS mirrors the list, and a test enforces that.
 - Git authentication for private repos goes through a credential helper
@@ -190,7 +190,21 @@ minor versions).
 
 ### Changed
 
-- Renamed the top-level Python package from `services` to `fleetmcp`
+- **Renamed the product from Fleet MCP to Flotilla MCP**, to avoid confusion
+  with the unrelated, pre-existing `fleet-mcp` PyPI project (a Fleet DM
+  tool). This is a naming-only change — no behavior, protected-path rules,
+  or manifest semantics changed.
+  - Import package: `fleetmcp` → `flotilla_mcp`.
+  - PyPI distribution: `fleetmcp` → `flotilla-mcp`.
+  - Console scripts: `fleetmcp` → `flotilla-mcp`, `fleetmcp-self-dev` →
+    `flotilla-self-dev`, `fleetmcp-watcher` → `flotilla-watcher`.
+  - Repository: `OmPrakashSingh1704/fleet-mcp` →
+    `OmPrakashSingh1704/flotilla-mcp`.
+  - Generic "fleet" terminology is unchanged: `fleet_manifest.yaml`,
+    `FLEET_MANIFEST_PATH`, the `mcp-fleet` Docker network, `FleetManifest`,
+    and prose like "fleet services" or "a fleet of MCP servers" still use
+    "fleet" as an ordinary English word, not as part of the product name.
+- Renamed the top-level Python package from `services` to `flotilla_mcp`
   (import paths, Dockerfiles, manifest paths and protected-core paths
   updated).
 - **Breaking (env rename, token split):** the shared `GITHUB_TOKEN` is
@@ -233,4 +247,4 @@ See [SECURITY.md](SECURITY.md#known-limitations) and the
 manager, `model-adapters-mcp`, `credentials-manager`, and the Model Manager
 chat flow are not built yet.
 
-[Unreleased]: https://github.com/OmPrakashSingh1704/fleet-mcp/commits/main
+[Unreleased]: https://github.com/OmPrakashSingh1704/flotilla-mcp/commits/main

@@ -1,6 +1,6 @@
-# Contributing to Fleet MCP
+# Contributing to Flotilla MCP
 
-Thanks for your interest in Fleet MCP. This document covers how to get a dev
+Thanks for your interest in Flotilla MCP. This document covers how to get a dev
 environment running, how we review changes, and what's different about
 reviewing a pull request that a self-dev agent opened versus one a human
 opened (short version: nothing — the bar is the same).
@@ -10,8 +10,8 @@ opened (short version: nothing — the bar is the same).
 Requirements: Python 3.11+.
 
 ```bash
-git clone https://github.com/OmPrakashSingh1704/fleet-mcp.git
-cd fleet-mcp
+git clone https://github.com/OmPrakashSingh1704/flotilla-mcp.git
+cd flotilla-mcp
 python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate on Windows
 pip install -r requirements-dev.txt
 python -m pytest tests -m "not docker" -v -W error::DeprecationWarning -W error::pytest.PytestUnhandledCoroutineWarning
@@ -55,13 +55,13 @@ warning, fix it before opening a PR rather than suppressing the flag.
 
 ## Test-driven development
 
-Fleet MCP's own codebase was built test-first, and we ask contributions to
+Flotilla MCP's own codebase was built test-first, and we ask contributions to
 follow the same shape: a failing test that demonstrates the bug or the new
 behavior, then the minimal implementation that makes it pass. This isn't
 bureaucracy — for the protected-path and rollback logic specifically, the
 test *is* the security control. A PR that changes behavior in
-`fleetmcp/common/manifest.py`, `fleetmcp/self_dev_mcp/tools.py`, or
-`fleetmcp/deploy_watcher/deploy_manager.py` without a corresponding test
+`flotilla_mcp/common/manifest.py`, `flotilla_mcp/self_dev_mcp/tools.py`, or
+`flotilla_mcp/deploy_watcher/deploy_manager.py` without a corresponding test
 change will get sent back, no matter how obviously correct the diff looks.
 
 Run the full suite before pushing:
@@ -85,10 +85,10 @@ The protected core described in [ARCHITECTURE.md](ARCHITECTURE.md) and
 [SECURITY.md](SECURITY.md) is:
 
 - the exact files in `ALWAYS_PROTECTED_PATHS`: `fleet_manifest.yaml`,
-  `fleetmcp/common/manifest.py`, `fleetmcp/__init__.py`, `requirements.txt`,
+  `flotilla_mcp/common/manifest.py`, `flotilla_mcp/__init__.py`, `requirements.txt`,
   `requirements-dev.txt`, `docker-compose.yml`, `pyproject.toml`,
   `.gitattributes`, `.gitignore`;
-- the subtrees in `ALWAYS_PROTECTED_PREFIXES`: `fleetmcp/common/` and
+- the subtrees in `ALWAYS_PROTECTED_PREFIXES`: `flotilla_mcp/common/` and
   `.github/`;
 - every service marked `protected: true` in the manifest (currently
   `deploy-watcher`; `permission-manager` and `mcp-gateway` once they exist).
@@ -109,7 +109,7 @@ apply the extra scrutiny.
 
 ## Enabling branch protection
 
-### Supported setup for `OmPrakashSingh1704/fleet-mcp`
+### Supported setup for `OmPrakashSingh1704/flotilla-mcp`
 
 The repository is **private, on GitHub Pro**. Protection is turned on in
 this order:
@@ -153,10 +153,10 @@ issues read/write on this repo only. Both are
 before a live agent is pointed at the repo.
 
 CODEOWNERS already names the real owner, so a repo admin with `gh`
-authenticated against `OmPrakashSingh1704/fleet-mcp` can run:
+authenticated against `OmPrakashSingh1704/flotilla-mcp` can run:
 
 ```bash
-gh api repos/OmPrakashSingh1704/fleet-mcp/branches/main/protection \
+gh api repos/OmPrakashSingh1704/flotilla-mcp/branches/main/protection \
   --method PUT \
   --input - <<'EOF'
 {
@@ -199,13 +199,13 @@ your comments land on the branch that gets the fix.
 
 ## Adding a new fleet service
 
-1. Create `fleetmcp/<your_service>/` with your service's code and its own
+1. Create `flotilla_mcp/<your_service>/` with your service's code and its own
    `tests/<your_service>/` mirror.
 2. Add an entry to `fleet_manifest.yaml`:
    ```yaml
    services:
      your-service:
-       path: fleetmcp/your_service
+       path: flotilla_mcp/your_service
        protected: false
        container: your-service
        health_check: http://your-service:8080/health
@@ -219,9 +219,9 @@ your comments land on the branch that gets the fix.
    starts. `health_check` is informational only: the watcher always probes
    `http://<service>-<sha>:8080/health` on the `mcp-fleet` network, so the
    service must listen on port 8080.
-3. Add a `Dockerfile` for the service under `fleetmcp/<your_service>/` (repo
+3. Add a `Dockerfile` for the service under `flotilla_mcp/<your_service>/` (repo
    root as build context, per the pattern the Deploy Watcher expects — see
-   `fleetmcp/deploy_watcher/image_builder.py`).
+   `flotilla_mcp/deploy_watcher/image_builder.py`).
 4. Expose a `/health` endpoint that returns HTTP 200 when the service is
    actually ready to serve traffic — the Deploy Watcher's blue/green swap
    depends on this being accurate, not just "the process is up."
@@ -230,14 +230,14 @@ your comments land on the branch that gets the fix.
 
 ## Cutting a release
 
-Releases (the `fleetmcp` PyPI package and its console scripts) are cut by a
+Releases (the `flotilla-mcp` PyPI package and its console scripts) are cut by a
 maintainer following [RELEASING.md](RELEASING.md) — version bump, changelog,
 tag, and the Trusted Publishing workflow. Contributors outside that process
 don't need it; it's documented for maintainers only.
 
 ## Contributor License stance
 
-Fleet MCP does not use a CLA. By submitting a contribution, you agree it's
+Flotilla MCP does not use a CLA. By submitting a contribution, you agree it's
 licensed under Apache-2.0, inbound = outbound — the same license as the
 rest of the project, with no separate agreement to sign.
 

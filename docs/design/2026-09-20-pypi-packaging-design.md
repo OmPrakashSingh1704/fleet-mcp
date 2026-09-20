@@ -1,6 +1,9 @@
 > **Point-in-time design record.** Written while planning the `services` →
 > `fleetmcp` rename this document itself proposes; some references below
 > (e.g. `python -m services....`) describe the pre-rename state on purpose.
+> It also predates the later Fleet MCP → Flotilla MCP product/package
+> rename, so every `fleetmcp`/`Fleet MCP` reference below is stale; the
+> shipped package is `flotilla_mcp` (PyPI distribution `flotilla-mcp`).
 > The code plus [ARCHITECTURE.md](../../ARCHITECTURE.md) are authoritative
 > for the current, actually-built layout and names.
 

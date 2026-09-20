@@ -1,13 +1,13 @@
 # Security Policy
 
-Fleet MCP grants an autonomous agent the ability to edit source code, open
+Flotilla MCP grants an autonomous agent the ability to edit source code, open
 pull requests, and (indirectly, after human merge) trigger a production
 deploy of a fleet of services. This document describes what we guarantee,
 what we assume, how to report a problem, and what we know is still weak.
 
 ## Supported versions
 
-Fleet MCP is pre-1.0. Only the latest `0.x` release receives security fixes.
+Flotilla MCP is pre-1.0. Only the latest `0.x` release receives security fixes.
 There is no long-term support branch yet; if you're running an older `0.x`
 version, upgrade before relying on it.
 
@@ -37,7 +37,7 @@ Do **not** connect a live agent to Self-Dev MCP for a repository until
    `enforce_admins` on, those PRs can never be merged. Owners are then
    tempted to switch protection off, which removes the only real backstop.
 
-For this repository (`OmPrakashSingh1704/fleet-mcp`, private, on GitHub
+For this repository (`OmPrakashSingh1704/flotilla-mcp`, private, on GitHub
 Pro) the supported sequence is: the owner merges the foundation branch;
 CODEOWNERS already names `@OmPrakashSingh1704` as owner, so right after that
 merge full branch
@@ -155,13 +155,13 @@ backstop against a hostile agent is GitHub-side: branch protection
 `enforce_admins`) plus a **separate bot identity** for self-dev. Both are
 [preconditions](#preconditions-before-pointing-a-live-agent-at-a-repo).
 
-- **Protected core.** Hardcoded in `fleetmcp/common/manifest.py`,
+- **Protected core.** Hardcoded in `flotilla_mcp/common/manifest.py`,
   independent of manifest content:
   - `ALWAYS_PROTECTED_PATHS` (exact files): `fleet_manifest.yaml`,
-    `fleetmcp/common/manifest.py`, `fleetmcp/__init__.py`,
+    `flotilla_mcp/common/manifest.py`, `flotilla_mcp/__init__.py`,
     `requirements.txt`, `requirements-dev.txt`, `docker-compose.yml`,
     `pyproject.toml`, `.gitattributes`, `.gitignore`.
-  - `ALWAYS_PROTECTED_PREFIXES` (whole subtrees): `fleetmcp/common/`,
+  - `ALWAYS_PROTECTED_PREFIXES` (whole subtrees): `flotilla_mcp/common/`,
     `.github/`.
 
   Services marked `protected: true` (`deploy-watcher`, `permission-manager`
@@ -174,7 +174,7 @@ backstop against a hostile agent is GitHub-side: branch protection
   mirrors this list (a test enforces that).
 - **Symlink- and junction-aware.** `write_file` checks the path as typed
   *and* the real target after resolving symlinks/junctions (relative to the
-  resolved workspace root). A link such as `innocent -> fleetmcp/deploy_watcher`
+  resolved workspace root). A link such as `innocent -> flotilla_mcp/deploy_watcher`
   cannot be used to write a protected file.
 - **`.git/` is off-limits to the tools.** `read_file`, `write_file` and
   `run_tests` refuse any path with a `.git` component (case-insensitive,
@@ -254,7 +254,7 @@ backstop against a hostile agent is GitHub-side: branch protection
   namespace), every guarantee above is void — "no Docker access" is a
   property of how you deploy these two services, not just of the Self-Dev
   MCP's own source code.
-- The machine running the Deploy Watcher is otherwise trusted. Fleet MCP
+- The machine running the Deploy Watcher is otherwise trusted. Flotilla MCP
   defends against a misbehaving or successfully-prompt-injected *agent*; it
   is not a sandbox against a host-level attacker who can already run
   arbitrary code on the Deploy Watcher's host.
@@ -264,14 +264,14 @@ backstop against a hostile agent is GitHub-side: branch protection
 These are documented, accepted gaps, not secrets — treat them as inputs to
 your own risk assessment, not as an invitation to assume they're fixed:
 
-- **The always-protected paths describe Fleet MCP's own repository, not
+- **The always-protected paths describe Flotilla MCP's own repository, not
   whatever repository Self-Dev MCP is pointed at.** `ALWAYS_PROTECTED_PATHS`
-  and `ALWAYS_PROTECTED_PREFIXES` in `fleetmcp/common/manifest.py` are a
+  and `ALWAYS_PROTECTED_PREFIXES` in `flotilla_mcp/common/manifest.py` are a
   fixed list of paths from *this* repository's own layout
-  (`fleetmcp/__init__.py`, `fleetmcp/common/`, and so on). When Self-Dev MCP
+  (`flotilla_mcp/__init__.py`, `flotilla_mcp/common/`, and so on). When Self-Dev MCP
   is configured against a different repository (a different
-  `SELF_DEV_REPO_REMOTE`/`GITHUB_REPO_FULL_NAME`), the `fleetmcp/...`
-  entries are inert there — that target repo has no `fleetmcp/` directory
+  `SELF_DEV_REPO_REMOTE`/`GITHUB_REPO_FULL_NAME`), the `flotilla_mcp/...`
+  entries are inert there — that target repo has no `flotilla_mcp/` directory
   for them to match — while the repository-shape-independent entries
   (`.git`, `.github/`, `requirements*.txt`, `docker-compose.yml`,
   `pyproject.toml`, `.gitattributes`, `.gitignore`, and anything the
@@ -352,7 +352,7 @@ your own risk assessment, not as an invitation to assume they're fixed:
   internet, and put it behind the planned MCP gateway once that exists. See
   the Hardening checklist below.
 - **Docker socket access is root-equivalent, regardless of the watcher's
-  non-root user.** `fleetmcp/deploy_watcher/entrypoint.sh` runs the watcher
+  non-root user.** `flotilla_mcp/deploy_watcher/entrypoint.sh` runs the watcher
   process as a non-root `watcher` user, but only after joining it to
   whichever group owns `/var/run/docker.sock` on the host. On Docker
   Desktop that socket is owned by GID 0 (`root`), so `watcher` joins the
@@ -364,7 +364,7 @@ your own risk assessment, not as an invitation to assume they're fixed:
 
 ## Hardening checklist for operators
 
-Before pointing Fleet MCP at a repository you care about:
+Before pointing Flotilla MCP at a repository you care about:
 
 - [ ] **(Precondition)** Enable GitHub branch protection on `main`: required
       `test` status check, at least one required review, required
@@ -377,8 +377,8 @@ Before pointing Fleet MCP at a repository you care about:
       user or a GitHub App), never the owner's PAT.
 - [x] `.github/CODEOWNERS` names a real human owner, `@OmPrakashSingh1704`
       (it covers the protected core: every `ALWAYS_PROTECTED_PATHS` file,
-      the `fleetmcp/common/` and `.github/` subtrees, the deploy watcher,
-      permission manager and gateway directories, `fleetmcp/self_dev_mcp/`,
+      the `flotilla_mcp/common/` and `.github/` subtrees, the deploy watcher,
+      permission manager and gateway directories, `flotilla_mcp/self_dev_mcp/`,
       and `SECURITY.md`). Code-owner review still cannot be enforced until
       branch protection above is enabled.
 - [ ] Use fine-grained tokens on this repo only: `SELF_DEV_GITHUB_TOKEN` with

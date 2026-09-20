@@ -1,8 +1,8 @@
 # Architecture
 
-This document describes Fleet MCP's components, their trust boundaries, the
+This document describes Flotilla MCP's components, their trust boundaries, the
 end-to-end self-dev cycle, and the data files the system relies on. It
-reflects the code in `fleetmcp/` and `tests/` as of the `0.1.0` foundation,
+reflects the code in `flotilla_mcp/` and `tests/` as of the `0.1.0` foundation,
 plus the specs it was built from:
 [self-dev-mcp design](docs/design/2026-09-19-self-dev-mcp-design.md)
 and
@@ -63,8 +63,8 @@ flowchart TB
 The trust boundary that matters most is the one around the Deploy Watcher
 container: it is the only component with Docker socket access and deploy
 credentials, it is marked `protected: true` in the fleet manifest, and — per
-`fleetmcp/deploy_watcher/*` — it never imports anything from
-`fleetmcp/self_dev_mcp`. The two services are isolated at the source level,
+`flotilla_mcp/deploy_watcher/*` — it never imports anything from
+`flotilla_mcp/self_dev_mcp`. The two services are isolated at the source level,
 not just by manifest configuration; there is no code path by which running
 the Deploy Watcher pulls in Self-Dev MCP logic or vice versa.
 
@@ -161,7 +161,7 @@ Key properties enforced in code, not just by convention:
   follow-ups land on the same PR.
 - `github_client.open_pr` checks for an already-open PR on that branch/base
   before creating one — idempotent by construction, not by luck.
-- Nothing in `fleetmcp/self_dev_mcp/` calls a merge API. The only GitHub
+- Nothing in `flotilla_mcp/self_dev_mcp/` calls a merge API. The only GitHub
   write operations it performs are `create_pull`, `create_comment`, and a
   push of `refs/heads/selfdev/issue-N` (explicit, non-forcing refspec). The
   token itself can do more, which is why branch protection is required.
@@ -255,7 +255,7 @@ agent-written code executed by `run_tests` bypasses layers 1 and 2 entirely
 (it can write any workspace file, which `submit_pr` commits with
 `git add -A`, and can call the GitHub API with the self-dev token).
 
-1. **Tool level** (`fleetmcp/self_dev_mcp/tools.py`,
+1. **Tool level** (`flotilla_mcp/self_dev_mcp/tools.py`,
    `_validate_workspace_path`). `write_file` refuses absolute, drive-letter
    and UNC paths, any path with a `.git` component, and any path the
    manifest protects. It checks both the typed path and the
@@ -269,15 +269,15 @@ agent-written code executed by `run_tests` bypasses layers 1 and 2 entirely
    explicit non-forcing refspec, so even a tampered `.git/config` can't
    redirect a push onto `main` or run a hook.
 2. **Manifest level, with hardcoded exceptions**
-   (`fleetmcp/common/manifest.py`). `FleetManifest.is_path_protected`
+   (`flotilla_mcp/common/manifest.py`). `FleetManifest.is_path_protected`
    protects any path under a service marked `protected: true`, any path
    listed in a service's `protected_paths`, and, regardless of what the
    loaded manifest says, the exact files in `ALWAYS_PROTECTED_PATHS`
-   (`fleet_manifest.yaml`, `fleetmcp/common/manifest.py`,
-   `fleetmcp/__init__.py`, `requirements.txt`, `requirements-dev.txt`,
+   (`fleet_manifest.yaml`, `flotilla_mcp/common/manifest.py`,
+   `flotilla_mcp/__init__.py`, `requirements.txt`, `requirements-dev.txt`,
    `docker-compose.yml`, `pyproject.toml`, `.gitattributes`,
    `.gitignore`) and the subtrees in
-   `ALWAYS_PROTECTED_PREFIXES` (`fleetmcp/common/`, `.github/`).
+   `ALWAYS_PROTECTED_PREFIXES` (`flotilla_mcp/common/`, `.github/`).
    `canonicalize_path` normalizes both sides identically: backslashes to
    `/`, `.`/`..` via `posixpath.normpath`, NTFS `:stream` suffixes and
    trailing dots/spaces stripped per component, case-folded. Anything that
@@ -309,11 +309,11 @@ review matters.
 
 ## Service isolation
 
-`fleetmcp/deploy_watcher/` contains no import of, or reference to,
-`fleetmcp/self_dev_mcp`, and vice versa. This isn't just tidiness — it's a
+`flotilla_mcp/deploy_watcher/` contains no import of, or reference to,
+`flotilla_mcp/self_dev_mcp`, and vice versa. This isn't just tidiness — it's a
 property this document (and a `grep` you can run yourself) can verify
-directly: `fleetmcp/self_dev_mcp` never imports `docker`, and
-`fleetmcp/deploy_watcher` never imports `fleetmcp.self_dev_mcp`. The two
+directly: `flotilla_mcp/self_dev_mcp` never imports `docker`, and
+`flotilla_mcp/deploy_watcher` never imports `flotilla_mcp.self_dev_mcp`. The two
 services communicate only indirectly, through GitHub (Self-Dev MCP pushes
 commits that a human merges; Deploy Watcher polls `main` for the result) —
 there is no in-process call path between them.
@@ -321,17 +321,17 @@ there is no in-process call path between them.
 ## Data files
 
 Two JSON files back the Deploy Watcher's state, both written through
-`fleetmcp/deploy_watcher/json_store.write_json_atomic` (temp file in the
+`flotilla_mcp/deploy_watcher/json_store.write_json_atomic` (temp file in the
 same directory, `fsync`, then `os.replace`), so a crash mid-write can never
 leave a corrupt or partially-written file:
 
-- **Service registry** (`fleetmcp/deploy_watcher/registry.py`,
+- **Service registry** (`flotilla_mcp/deploy_watcher/registry.py`,
   `ServiceRegistry`) — maps `service_name -> active_container_name`. This is
   described in the source as "a file-backed stand-in for the MCP gateway's
   routing table" — once the MCP gateway (planned) exists, it is expected to
   read from this same file rather than the Deploy Watcher growing its own
   routing API.
-- **Known-good store** (`fleetmcp/deploy_watcher/known_good.py`,
+- **Known-good store** (`flotilla_mcp/deploy_watcher/known_good.py`,
   `KnownGoodStore`) — maps `service_name -> last-proven image tag`. Only
   written by the probation monitor after a full probation window with zero
   failures; this file is what `rollback()` reads to decide what to roll
@@ -374,7 +374,7 @@ for the full design.
   three modes: `pr` (today's behavior), `local` (direct push to `main`,
   falling back to opening a PR if branch protection rejects the push), and
   `issue_only` (files a GitHub issue and writes no code). None of this
-  exists in `fleetmcp/self_dev_mcp/server.py` yet — `handle_submit_pr` is
+  exists in `flotilla_mcp/self_dev_mcp/server.py` yet — `handle_submit_pr` is
   the only finalize path today.
 
 Until these are built, do not assume a `model-adapters-mcp` or

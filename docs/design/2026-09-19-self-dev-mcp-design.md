@@ -1,4 +1,4 @@
-> **Historical design document.** This is the original design; the shipped behavior differs (e.g. a monorepo manifest instead of per-repo remotes, 7 tools, and the hardening in SECURITY.md). The code, [ARCHITECTURE.md](../../ARCHITECTURE.md) and [SECURITY.md](../../SECURITY.md) are authoritative.
+> **Historical design document.** This is the original design; the shipped behavior differs (e.g. a monorepo manifest instead of per-repo remotes, 7 tools, and the hardening in SECURITY.md). It also predates the Fleet MCP → Flotilla MCP product/package rename, so any mention of "Fleet MCP" or `fleetmcp` below is stale; the shipped package is `flotilla_mcp` (PyPI distribution `flotilla-mcp`). The code, [ARCHITECTURE.md](../../ARCHITECTURE.md) and [SECURITY.md](../../SECURITY.md) are authoritative.
 
 # Self-Dev MCP — Design Spec
 

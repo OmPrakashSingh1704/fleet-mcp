@@ -1,8 +1,9 @@
 > **Planned design; not implemented.** Nothing in this document exists in
-> the codebase yet. It also predates the `services` → `fleetmcp` package
+> the codebase yet. It also predates both the `services` → `fleetmcp`
+> package rename and the later Fleet MCP → Flotilla MCP product/package
 > rename, so paths and names below (e.g. `services/model_adapters/...`,
-> `services/common/manifest.py`) may be stale; a built equivalent would live
-> under `fleetmcp/`. The code plus
+> `services/common/manifest.py`, and any mention of `fleetmcp`) may be
+> stale; a built equivalent would live under `flotilla_mcp/`. The code plus
 > [ARCHITECTURE.md](../../ARCHITECTURE.md) are authoritative for what is
 > actually built and what it's actually called.
 

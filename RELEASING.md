@@ -1,6 +1,6 @@
-# Releasing `fleetmcp`
+# Releasing `flotilla-mcp`
 
-This document is for maintainers cutting a release of the `fleetmcp` PyPI
+This document is for maintainers cutting a release of the `flotilla-mcp` PyPI
 package. It describes the one-time setup, the steps to cut a release, how to
 recover from a failed release, and the security model behind the pipeline.
 The pipeline itself is `.github/workflows/release.yml`.
@@ -8,7 +8,7 @@ The pipeline itself is `.github/workflows/release.yml`.
 ## Prerequisites (one-time)
 
 These only need to be done once, before the first release, by whoever
-administers the `OmPrakashSingh1704/fleet-mcp` repository and the `fleetmcp`
+administers the `OmPrakashSingh1704/flotilla-mcp` repository and the `flotilla-mcp`
 project on PyPI/TestPyPI.
 
 1. **A PyPI account and a TestPyPI account.** These are separate accounts on
@@ -16,15 +16,15 @@ project on PyPI/TestPyPI.
    login does not work on TestPyPI.
 
 2. **A "pending publisher" on each, so PyPI trusts this repository's GitHub
-   Actions runs without an API token.** On PyPI, under the `fleetmcp`
+   Actions runs without an API token.** On PyPI, under the `flotilla-mcp`
    project (or, before the project exists yet, via "Publish a new project"
    with a pending publisher), add a publisher with exactly:
 
    | Field | Value |
    |---|---|
-   | PyPI project name | `fleetmcp` |
+   | PyPI project name | `flotilla-mcp` |
    | Owner | `OmPrakashSingh1704` |
-   | Repository name | `fleet-mcp` |
+   | Repository name | `flotilla-mcp` |
    | Workflow name | `release.yml` |
    | Environment name | `pypi` |
 
@@ -53,7 +53,7 @@ project on PyPI/TestPyPI.
 
    - The PyPI project page's links (Homepage, Source, Issues, Changelog,
      Security, from `pyproject.toml`'s `[project.urls]`) will 404 for
-     visitors until `OmPrakashSingh1704/fleet-mcp` is public.
+     visitors until `OmPrakashSingh1704/flotilla-mcp` is public.
    - The README's logo and any other image served from
      `raw.githubusercontent.com` (see
      [pyproject.toml](pyproject.toml)'s `[tool.hatch.metadata.hooks.fancy-pypi-readme]`
@@ -66,7 +66,7 @@ project on PyPI/TestPyPI.
 
 ## Cutting a release
 
-1. **Bump the version** in [`fleetmcp/__init__.py`](fleetmcp/__init__.py)
+1. **Bump the version** in [`flotilla_mcp/__init__.py`](flotilla_mcp/__init__.py)
    (`__version__ = "X.Y.Z"`). This is the single source of truth for the
    package version — `[tool.hatch.version]` in `pyproject.toml` reads it,
    and `scripts/check_tag_version.py` checks the release tag against it.
@@ -113,19 +113,19 @@ project on PyPI/TestPyPI.
 6. **Verify:**
 
    ```bash
-   pip install fleetmcp==X.Y.Z
+   pip install flotilla-mcp==X.Y.Z
    ```
 
-   in a clean virtualenv, and confirm `fleetmcp-self-dev --version` prints
+   in a clean virtualenv, and confirm `flotilla-self-dev --version` prints
    `X.Y.Z`.
 
 ## Failure recovery
 
 - **A version/tag mismatch fails before any build happens.** The `verify`
-  job's `Check tag matches fleetmcp.__version__` step
+  job's `Check tag matches flotilla_mcp.__version__` step
   (`scripts/check_tag_version.py`) runs before `build`, so a tag pushed
   against the wrong `__version__` never reaches `python -m build`, let alone
-  PyPI. Fix `fleetmcp/__init__.py`, delete the bad tag, and re-tag.
+  PyPI. Fix `flotilla_mcp/__init__.py`, delete the bad tag, and re-tag.
 
 - **PyPI (and TestPyPI) versions are immutable.** Once `X.Y.Z` is uploaded,
   you cannot re-upload a different artifact under the same version, on
@@ -156,7 +156,7 @@ project on PyPI/TestPyPI.
   https://pypi.org, "Options" → "Yank release", and give a reason. Yanking
   does not delete the release (existing pins that reference it still
   resolve), it only stops it from being selected by a bare `pip install
-  fleetmcp` going forward. There is no API-driven yank in this pipeline;
+  flotilla-mcp` going forward. There is no API-driven yank in this pipeline;
   it's a deliberate manual, human action.
 
 ## Security

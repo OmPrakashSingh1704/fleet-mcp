@@ -52,7 +52,7 @@ moderation decisions when appropriate.
 ## Scope
 
 This Code of Conduct applies within all community spaces (issues, pull
-requests, discussions, and any other Fleet MCP-affiliated space), and also
+requests, discussions, and any other Flotilla MCP-affiliated space), and also
 applies when an individual is officially representing the community in
 public spaces.
 
