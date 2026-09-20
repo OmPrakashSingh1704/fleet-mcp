@@ -9,6 +9,10 @@ minor versions).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.1] - 2026-09-20
+
 ### Added
 
 - Zero-config startup for Self-Dev MCP: `SELF_DEV_GITHUB_TOKEN` is now the
@@ -293,5 +297,6 @@ See [SECURITY.md](SECURITY.md#known-limitations) and the
 manager, `model-adapters-mcp`, `credentials-manager`, and the Model Manager
 chat flow are not built yet.
 
-[Unreleased]: https://github.com/OmPrakashSingh1704/flotilla-mcp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/OmPrakashSingh1704/flotilla-mcp/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/OmPrakashSingh1704/flotilla-mcp/releases/tag/v0.1.1
 [0.1.0]: https://github.com/OmPrakashSingh1704/flotilla-mcp/releases/tag/v0.1.0
