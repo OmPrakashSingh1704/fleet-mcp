@@ -20,7 +20,7 @@ from starlette.routing import Mount, Route
 from flotilla_mcp import __version__
 from flotilla_mcp.common.manifest import FleetManifest
 from flotilla_mcp.self_dev_mcp.attempt_tracker import AttemptsExhaustedError, AttemptTracker
-from flotilla_mcp.self_dev_mcp.config import load_settings
+from flotilla_mcp.self_dev_mcp.config import RepoRemoteNotFoundError, load_settings
 from flotilla_mcp.self_dev_mcp.git_ops import (
     GitOpsError,
     checkout_remote_branch,
@@ -45,6 +45,23 @@ audit_logger = logging.getLogger("flotilla_mcp.audit")
 # (never-raise contract for MCP tool handlers).
 _GITHUB_ERRORS = (GithubException, requests.RequestException)
 
+# Returned by every GitHub-backed handler when the server was started
+# against a non-GitHub remote (or a local path), so github_repo_full_name
+# couldn't be detected and wasn't set explicitly. The editing tools
+# (start_issue, read_file, write_file, run_tests) are unaffected -- only
+# GitHub API calls need this.
+NO_GITHUB_ERROR = "ERROR: no GitHub repository configured; set GITHUB_REPO_FULL_NAME to use GitHub features"
+
+
+def _prog_name() -> str:
+    """The invoked program name, for messages -- so `uvx flotilla-mcp` says
+    "flotilla-mcp:" and `flotilla-self-dev` says "flotilla-self-dev:",
+    instead of a name hardcoded to one of the two console-script aliases."""
+    name = os.path.basename(sys.argv[0])
+    if name.lower().endswith(".exe"):
+        name = name[: -len(".exe")]
+    return name or "flotilla-mcp"
+
 
 def _audit_denial(tool: str, issue_number: int, path: str, reason: str) -> None:
     audit_logger.warning(
@@ -57,7 +74,10 @@ class ServerDependencies:
     repo_remote: str
     manifest: FleetManifest
     tracker: AttemptTracker
-    github_client: GitHubClient
+    # None when no GitHub repository is configured (a non-GitHub remote, or
+    # a local path) -- GitHub-backed handlers check for this and return
+    # NO_GITHUB_ERROR instead of touching it.
+    github_client: GitHubClient | None
     workspaces: dict = field(default_factory=dict)
     test_timeout_seconds: float = DEFAULT_TEST_TIMEOUT_SECONDS
     # Tool handlers run in worker threads (see build_mcp_app), so workspace
@@ -124,6 +144,8 @@ def handle_write_file(issue_number: int, relative_path: str, content: str, deps:
         return f"REFUSED: {exc}"
     except AttemptsExhaustedError as exc:
         _audit_denial("write_file", issue_number, relative_path, f"EXHAUSTED: {exc}")
+        if deps.github_client is None:
+            return f"EXHAUSTED: {exc} (failed to comment on issue: {NO_GITHUB_ERROR})"
         try:
             deps.github_client.comment_on_issue(issue_number, f"Giving up: {exc}")
         except _GITHUB_ERRORS as comment_exc:
@@ -180,6 +202,8 @@ def handle_submit_pr(issue_number: int, title: str, body: str, deps: ServerDepen
     workspace_dir = _workspace_for(issue_number, deps)
     if workspace_dir is None:
         return _missing_workspace_error(issue_number)
+    if deps.github_client is None:
+        return NO_GITHUB_ERROR
     branch_name = _branch_name(issue_number)
     try:
         commit_all(workspace_dir, title)
@@ -197,6 +221,8 @@ def handle_submit_pr(issue_number: int, title: str, body: str, deps: ServerDepen
 
 
 def handle_list_assigned_issues(deps: ServerDependencies, label: str = "self-dev") -> str:
+    if deps.github_client is None:
+        return NO_GITHUB_ERROR
     try:
         issues = deps.github_client.list_issues_by_label(label)
     except _GITHUB_ERRORS as exc:
@@ -207,23 +233,92 @@ def handle_list_assigned_issues(deps: ServerDependencies, label: str = "self-dev
 
 
 def handle_check_pr_status(pr_number: int, deps: ServerDependencies) -> str:
+    if deps.github_client is None:
+        return NO_GITHUB_ERROR
     try:
         return deps.github_client.get_pr_status(pr_number)
     except _GITHUB_ERRORS as exc:
         return f"ERROR: {exc}"
 
 
-def manifest_path() -> str:
-    return os.environ.get("FLEET_MANIFEST_PATH", "fleet_manifest.yaml")
+def _git_repo_root() -> str | None:
+    """The current git repo's top-level directory, or None if not in one."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    root = result.stdout.strip()
+    return root or None
+
+
+def _manifest_fallback_candidates() -> list[str]:
+    """Default (non-explicit) manifest locations, in resolution order."""
+    candidates = ["fleet_manifest.yaml"]
+    root = _git_repo_root()
+    if root:
+        repo_candidate = os.path.join(root, "fleet_manifest.yaml")
+        if os.path.abspath(repo_candidate) not in (os.path.abspath(c) for c in candidates):
+            candidates.append(repo_candidate)
+    return candidates
+
+
+def manifest_path() -> str | None:
+    """Resolve the fleet manifest path.
+
+    Resolution order:
+    1. ``FLEET_MANIFEST_PATH``, if set -- returned even if it doesn't exist,
+       so an explicit-but-missing path is a hard error, not a fallback.
+    2. ``fleet_manifest.yaml`` in the current directory, if it exists.
+    3. ``fleet_manifest.yaml`` at the git repo root (``git rev-parse
+       --show-toplevel``), if the cwd is inside a repo and it exists.
+    4. None -- the caller falls back to an empty manifest.
+    """
+    explicit = os.environ.get("FLEET_MANIFEST_PATH")
+    if explicit:
+        return explicit
+    for candidate in _manifest_fallback_candidates():
+        if os.path.exists(candidate):
+            return candidate
+    return None
+
+
+def _load_manifest() -> FleetManifest:
+    resolved = manifest_path()
+    if resolved is not None:
+        return FleetManifest.load(resolved)
+    # No FLEET_MANIFEST_PATH and no fleet_manifest.yaml anywhere in the
+    # resolution order: start with an empty manifest (equivalent to
+    # `services: {}`) rather than failing -- only an *explicit* path that
+    # doesn't exist is a hard error. Only the built-in always-protected
+    # paths apply until a manifest is added.
+    checked = ", ".join(_manifest_fallback_candidates())
+    logging.getLogger(__name__).warning(
+        "no fleet manifest found (checked: %s); starting with an empty manifest -- "
+        "only the built-in always-protected paths apply, and nothing in the "
+        "target repo is service-protected until a fleet_manifest.yaml exists",
+        checked,
+    )
+    return FleetManifest({})
 
 
 def build_mcp_app() -> FastMCP:
     settings = load_settings()
+    github_client = (
+        GitHubClient(settings.github_token, settings.github_repo_full_name)
+        if settings.github_repo_full_name
+        else None
+    )
     deps = ServerDependencies(
         repo_remote=settings.repo_remote,
-        manifest=FleetManifest.load(manifest_path()),
+        manifest=_load_manifest(),
         tracker=AttemptTracker(max_attempts=settings.max_attempts),
-        github_client=GitHubClient(settings.github_token, settings.github_repo_full_name),
+        github_client=github_client,
         test_timeout_seconds=settings.test_timeout_seconds,
     )
 
@@ -313,7 +408,7 @@ def build_http_app() -> Starlette:
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the Self-Dev MCP server")
+    parser = argparse.ArgumentParser(prog=_prog_name(), description="Run the Self-Dev MCP server")
     parser.add_argument(
         "--transport",
         choices=["stdio", "http"],
@@ -344,14 +439,23 @@ def main(argv: list[str] | None = None) -> None:
     # same env vars), so a KeyError from something else entirely -- e.g. a
     # malformed fleet_manifest.yaml missing a service's `path` key --
     # can't be misreported as a missing environment variable.
+    prog = _prog_name()
     try:
         load_settings()
     except KeyError as exc:
         var = exc.args[0] if exc.args else exc
         print(
-            f"flotilla-self-dev: missing required environment variable {var!r}.\n"
+            f"{prog}: missing required environment variable {var!r}.\n"
             "See the Install section in README.md and .env.example for the "
             "full list of required and optional variables.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    except RepoRemoteNotFoundError:
+        print(
+            f"{prog}: could not detect a git repository remote.\n"
+            "Run inside a git repository with an 'origin' remote, or set "
+            "SELF_DEV_REPO_REMOTE.",
             file=sys.stderr,
         )
         raise SystemExit(1)
@@ -366,7 +470,7 @@ def main(argv: list[str] | None = None) -> None:
     except FileNotFoundError as exc:
         path = exc.filename or manifest_path()
         print(
-            f"flotilla-self-dev: fleet manifest not found at {path!r}.\n"
+            f"{prog}: fleet manifest not found at {path!r}.\n"
             "Set FLEET_MANIFEST_PATH to point at your fleet_manifest.yaml, "
             "or run from a directory that has one -- see the Install section "
             "in README.md.",

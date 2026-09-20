@@ -64,16 +64,24 @@ This installs three console scripts:
 
 Self-Dev MCP reads its configuration from environment variables (see
 [.env.example](.env.example) and
-[flotilla_mcp/self_dev_mcp/config.py](flotilla_mcp/self_dev_mcp/config.py)):
+[flotilla_mcp/self_dev_mcp/config.py](flotilla_mcp/self_dev_mcp/config.py)).
+**`SELF_DEV_GITHUB_TOKEN` is the only variable you have to set** — run it from
+inside a git checkout with a GitHub `origin` remote and everything else is
+detected:
 
 | Variable | Required | Meaning |
 |---|---|---|
 | `SELF_DEV_GITHUB_TOKEN` | yes | fine-grained token (or bot token): contents, pull requests, and issues read/write on the target repo |
-| `GITHUB_REPO_FULL_NAME` | yes | `owner/repo` |
-| `SELF_DEV_REPO_REMOTE` | yes | git remote URL used for the clone/branch/commit/push workflow |
-| `FLEET_MANIFEST_PATH` | no (default `fleet_manifest.yaml`) | path to the fleet manifest |
+| `SELF_DEV_REPO_REMOTE` | no (auto-detected) | git remote URL used for the clone/branch/commit/push workflow. When unset, detected by running `git remote get-url origin` in the server's working directory. |
+| `GITHUB_REPO_FULL_NAME` | no (auto-detected) | `owner/repo`. When unset, parsed from `SELF_DEV_REPO_REMOTE` (explicit or detected). A non-GitHub remote (or a local path) parses to nothing — the editing tools (`start_issue`, `read_file`, `write_file`, `run_tests`) still work; the GitHub-backed tools (`list_assigned_issues`, `check_pr_status`, `submit_pr`) return an `ERROR: no GitHub repository configured` string instead of failing to start. |
+| `FLEET_MANIFEST_PATH` | no | path to the fleet manifest. When unset, resolved in order: `fleet_manifest.yaml` in the current directory, then `fleet_manifest.yaml` at the git repo root. If none of those exist either, the server starts with an empty manifest (no services declared) and logs one warning — only the built-in always-protected paths apply until a manifest exists. An *explicit* `FLEET_MANIFEST_PATH` that doesn't exist is still a hard error. |
 | `SELF_DEV_MAX_ATTEMPTS` | no (default `5`) | per-issue write attempt cap |
 | `SELF_DEV_TEST_TIMEOUT_SECONDS` | no (default `600`) | `run_tests` timeout, in seconds |
+
+An explicitly set environment variable always wins over auto-detection. If
+`SELF_DEV_REPO_REMOTE` is unset and no `origin` remote can be detected, the
+server exits with a one-line error naming both fixes: run it inside a git
+repository with an `origin` remote, or set `SELF_DEV_REPO_REMOTE`.
 
 Read
 [SECURITY.md#preconditions-before-pointing-a-live-agent-at-a-repo](SECURITY.md#preconditions-before-pointing-a-live-agent-at-a-repo)
@@ -88,7 +96,10 @@ first.
 
 ### Claude Desktop
 
-Add to your Claude Desktop config (`claude_desktop_config.json`):
+Add to your Claude Desktop config (`claude_desktop_config.json`). The token
+is the only variable that's required — as long as the server's working
+directory is inside a git checkout with a GitHub `origin` remote, the repo
+remote and `owner/repo` are auto-detected (see [Install](#install) above):
 
 ```json
 {
@@ -97,15 +108,17 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
       "command": "uvx",
       "args": ["flotilla-mcp"],
       "env": {
-        "SELF_DEV_GITHUB_TOKEN": "<fine-grained token>",
-        "GITHUB_REPO_FULL_NAME": "owner/repo",
-        "SELF_DEV_REPO_REMOTE": "https://github.com/owner/repo.git",
-        "FLEET_MANIFEST_PATH": "/path/to/fleet_manifest.yaml"
+        "SELF_DEV_GITHUB_TOKEN": "<fine-grained token>"
       }
     }
   }
 }
 ```
+
+If your client doesn't run the server with a working directory inside the
+target repo (or you want to be explicit), set `SELF_DEV_REPO_REMOTE` (and
+optionally `GITHUB_REPO_FULL_NAME`, `FLEET_MANIFEST_PATH`) in `env` the same
+way as before -- an explicit value always overrides auto-detection.
 
 ### Claude Code
 
