@@ -1,3 +1,9 @@
+> **Point-in-time design record.** Written while planning the `services` →
+> `fleetmcp` rename this document itself proposes; some references below
+> (e.g. `python -m services....`) describe the pre-rename state on purpose.
+> The code plus [ARCHITECTURE.md](../../ARCHITECTURE.md) are authoritative
+> for the current, actually-built layout and names.
+
 # PyPI Packaging and Release — Design Spec
 
 Date: 2026-09-20

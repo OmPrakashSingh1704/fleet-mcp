@@ -66,7 +66,13 @@ def test_wheel_readme_links_are_absolute(wheel):
     assert "](SECURITY.md" not in long_description
     assert "](ARCHITECTURE.md" not in long_description
     assert 'src="assets/' not in long_description
+    assert 'href="LICENSE"' not in long_description
+    assert 'href="CONTRIBUTING.md"' not in long_description
     assert (
         "https://raw.githubusercontent.com/OmPrakashSingh1704/fleet-mcp/main/assets/logo.svg"
+        in long_description
+    )
+    assert (
+        "https://github.com/OmPrakashSingh1704/fleet-mcp/blob/main/LICENSE"
         in long_description
     )

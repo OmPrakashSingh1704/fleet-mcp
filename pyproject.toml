@@ -76,6 +76,13 @@ replacement = '](https://github.com/OmPrakashSingh1704/fleet-mcp/blob/main/\1)'
 pattern = '(src|srcset)="assets/'
 replacement = '\1="https://raw.githubusercontent.com/OmPrakashSingh1704/fleet-mcp/main/assets/'
 
+# The badge <a href="LICENSE">/<a href="CONTRIBUTING.md"> wrappers become
+# absolute GitHub blob links, for the same reason as the markdown-link
+# substitution above (skips absolute URLs and in-page anchors).
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '<a href="(?!https?://|#)([^"]+)"'
+replacement = '<a href="https://github.com/OmPrakashSingh1704/fleet-mcp/blob/main/\1"'
+
 [tool.hatch.build.targets.wheel]
 packages = ["fleetmcp"]
 exclude = [
