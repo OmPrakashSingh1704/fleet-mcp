@@ -11,7 +11,7 @@ services:
   fixture-hello-mcp:
     build:
       context: .
-      dockerfile: services/fixture_hello_mcp/Dockerfile
+      dockerfile: fleetmcp/fixture_hello_mcp/Dockerfile
     image: fixture-hello-mcp
     restart: unless-stopped
     networks:
@@ -30,7 +30,7 @@ services:
   self-dev-mcp:
     build:
       context: .
-      dockerfile: services/self_dev_mcp/Dockerfile
+      dockerfile: fleetmcp/self_dev_mcp/Dockerfile
     image: self-dev-mcp
     restart: unless-stopped
     networks:
@@ -64,7 +64,7 @@ services:
   deploy-watcher:
     build:
       context: .
-      dockerfile: services/deploy_watcher/Dockerfile
+      dockerfile: fleetmcp/deploy_watcher/Dockerfile
     image: deploy-watcher
     restart: unless-stopped
     networks:
@@ -84,7 +84,7 @@ services:
       # Docker socket access is root-equivalent on the host: anyone who can
       # reach this socket can run arbitrary containers with arbitrary host
       # mounts, independent of which user inside the container holds it
-      # (see services/deploy_watcher/Dockerfile and entrypoint.sh for how
+      # (see fleetmcp/deploy_watcher/Dockerfile and entrypoint.sh for how
       # this container still drops to a non-root user at runtime).
       - /var/run/docker.sock:/var/run/docker.sock
       - watcher-data:/data

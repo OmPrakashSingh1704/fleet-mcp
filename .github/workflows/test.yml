@@ -22,8 +22,13 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-      - run: pip install -r requirements.txt
+          cache-dependency-path: requirements*.txt
+      - run: pip install -r requirements-dev.txt
       - run: python -m pytest tests -m "not docker" -v -W error::DeprecationWarning -W error::pytest.PytestUnhandledCoroutineWarning
+      - name: Build and check distributions
+        run: |
+          python -m build --outdir dist .
+          python -m twine check --strict dist/*
 
   # Not a required status check (branch protection only requires "test").
   # GitHub-hosted ubuntu-latest runners ship a Docker daemon and network
@@ -38,5 +43,6 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-      - run: pip install -r requirements.txt
+          cache-dependency-path: requirements*.txt
+      - run: pip install -r requirements-dev.txt
       - run: python -m pytest tests -m docker -v -W error::DeprecationWarning -W error::pytest.PytestUnhandledCoroutineWarning

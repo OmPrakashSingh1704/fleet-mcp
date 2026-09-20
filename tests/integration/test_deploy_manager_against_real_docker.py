@@ -26,9 +26,9 @@ import docker
 import docker.errors
 import pytest
 
-from services.deploy_watcher.deploy_manager import DeployManager
-from services.deploy_watcher.known_good import KnownGoodStore
-from services.deploy_watcher.registry import ServiceRegistry
+from fleetmcp.deploy_watcher.deploy_manager import DeployManager
+from fleetmcp.deploy_watcher.known_good import KnownGoodStore
+from fleetmcp.deploy_watcher.registry import ServiceRegistry
 
 NETWORK_NAME = "mcp-fleet"
 
@@ -271,7 +271,7 @@ def test_deploy_lifecycle_against_real_docker(tmp_path, docker_client, svc):
 
     # --- (d) retired-sha guard: redeploying v3 (whose container still
     # exists, stopped) is refused outright, with no new build. ---
-    with patch("services.deploy_watcher.deploy_manager.build_image") as mock_build:
+    with patch("fleetmcp.deploy_watcher.deploy_manager.build_image") as mock_build:
         result_v3_again = manager.deploy(svc, svc, "v3")
 
     assert result_v3_again.success is False

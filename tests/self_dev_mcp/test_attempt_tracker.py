@@ -1,6 +1,6 @@
 import threading
 
-from services.self_dev_mcp.attempt_tracker import AttemptTracker
+from fleetmcp.self_dev_mcp.attempt_tracker import AttemptTracker
 
 
 def test_attempts_remaining_decreases_with_each_record():

@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import requests
 
-from services.deploy_watcher.health import wait_for_healthy
+from fleetmcp.deploy_watcher.health import wait_for_healthy
 
 
 class _FakeResponse:
@@ -10,8 +10,8 @@ class _FakeResponse:
         self.status_code = status_code
 
 
-@patch("services.deploy_watcher.health.time.sleep", return_value=None)
-@patch("services.deploy_watcher.health.requests.get")
+@patch("fleetmcp.deploy_watcher.health.time.sleep", return_value=None)
+@patch("fleetmcp.deploy_watcher.health.requests.get")
 def test_wait_for_healthy_returns_true_after_required_successes(mock_get, _mock_sleep):
     mock_get.return_value = _FakeResponse(200)
 
@@ -21,8 +21,8 @@ def test_wait_for_healthy_returns_true_after_required_successes(mock_get, _mock_
     assert mock_get.call_count >= 3
 
 
-@patch("services.deploy_watcher.health.time.sleep", return_value=None)
-@patch("services.deploy_watcher.health.requests.get")
+@patch("fleetmcp.deploy_watcher.health.time.sleep", return_value=None)
+@patch("fleetmcp.deploy_watcher.health.requests.get")
 def test_wait_for_healthy_resets_streak_on_failure(mock_get, _mock_sleep):
     mock_get.side_effect = [
         _FakeResponse(200),
@@ -38,9 +38,9 @@ def test_wait_for_healthy_resets_streak_on_failure(mock_get, _mock_sleep):
     assert mock_get.call_count == 5
 
 
-@patch("services.deploy_watcher.health.time.monotonic")
-@patch("services.deploy_watcher.health.time.sleep", return_value=None)
-@patch("services.deploy_watcher.health.requests.get")
+@patch("fleetmcp.deploy_watcher.health.time.monotonic")
+@patch("fleetmcp.deploy_watcher.health.time.sleep", return_value=None)
+@patch("fleetmcp.deploy_watcher.health.requests.get")
 def test_wait_for_healthy_times_out_and_returns_false(mock_get, _mock_sleep, mock_monotonic):
     mock_get.side_effect = requests.RequestException("connection refused")
     mock_monotonic.side_effect = [0, 1, 2, 100]

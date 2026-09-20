@@ -1,4 +1,4 @@
-from services.deploy_watcher.known_good import KnownGoodStore
+from fleetmcp.deploy_watcher.known_good import KnownGoodStore
 
 
 def test_record_and_get(tmp_path):

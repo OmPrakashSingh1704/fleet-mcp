@@ -34,7 +34,7 @@ the GitHub API, so the preconditions above are the real backstop.
 ## Steps
 
 1. **Create a `self-dev`-labeled issue** in your GitHub repo describing a
-   small, safe change (e.g. a fix in `services/fixture_hello_mcp`).
+   small, safe change (e.g. a fix in `fleetmcp/fixture_hello_mcp`).
 2. **Drive Self-Dev MCP to a PR**: call `list_assigned_issues`,
    `start_issue`, `write_file`, `run_tests`, and `submit_pr` against
    that issue and confirm a real pull request appears on

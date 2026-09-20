@@ -1,4 +1,4 @@
-from services.deploy_watcher.registry import ServiceRegistry
+from fleetmcp.deploy_watcher.registry import ServiceRegistry
 
 
 def test_set_and_get_active_container(tmp_path):

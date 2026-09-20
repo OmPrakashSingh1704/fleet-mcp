@@ -9,12 +9,12 @@ import docker
 import requests
 from github import GithubException
 
-from services.common.manifest import FleetManifest
-from services.deploy_watcher.checkout import CheckoutError, sync_checkout
-from services.deploy_watcher.deploy_manager import DeployManager, DeployResult
-from services.deploy_watcher.github_poller import GitHubPoller
-from services.deploy_watcher.known_good import KnownGoodStore
-from services.deploy_watcher.registry import ServiceRegistry
+from fleetmcp.common.manifest import FleetManifest
+from fleetmcp.deploy_watcher.checkout import CheckoutError, sync_checkout
+from fleetmcp.deploy_watcher.deploy_manager import DeployManager, DeployResult
+from fleetmcp.deploy_watcher.github_poller import GitHubPoller
+from fleetmcp.deploy_watcher.known_good import KnownGoodStore
+from fleetmcp.deploy_watcher.registry import ServiceRegistry
 
 _logger = logging.getLogger(__name__)
 

@@ -1,4 +1,4 @@
-from services.self_dev_mcp.config import load_settings
+from fleetmcp.self_dev_mcp.config import load_settings
 
 
 def test_load_settings_reads_env(monkeypatch):

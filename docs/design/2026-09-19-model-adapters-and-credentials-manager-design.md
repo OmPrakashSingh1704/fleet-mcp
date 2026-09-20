@@ -1,5 +1,10 @@
 > **Planned design; not implemented.** Nothing in this document exists in
-> the codebase yet. See [ARCHITECTURE.md](../../ARCHITECTURE.md) for what is built.
+> the codebase yet. It also predates the `services` → `fleetmcp` package
+> rename, so paths and names below (e.g. `services/model_adapters/...`,
+> `services/common/manifest.py`) may be stale; a built equivalent would live
+> under `fleetmcp/`. The code plus
+> [ARCHITECTURE.md](../../ARCHITECTURE.md) are authoritative for what is
+> actually built and what it's actually called.
 
 # Model Adapters + Credentials Manager — Design Spec
 

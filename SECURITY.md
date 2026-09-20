@@ -153,13 +153,13 @@ backstop against a hostile agent is GitHub-side: branch protection
 `enforce_admins`) plus a **separate bot identity** for self-dev. Both are
 [preconditions](#preconditions-before-pointing-a-live-agent-at-a-repo).
 
-- **Protected core.** Hardcoded in `services/common/manifest.py`,
+- **Protected core.** Hardcoded in `fleetmcp/common/manifest.py`,
   independent of manifest content:
   - `ALWAYS_PROTECTED_PATHS` (exact files): `fleet_manifest.yaml`,
-    `services/common/manifest.py`, `services/__init__.py`,
-    `requirements.txt`, `docker-compose.yml`, `pyproject.toml`,
-    `.gitattributes`, `.gitignore`.
-  - `ALWAYS_PROTECTED_PREFIXES` (whole subtrees): `services/common/`,
+    `fleetmcp/common/manifest.py`, `fleetmcp/__init__.py`,
+    `requirements.txt`, `requirements-dev.txt`, `docker-compose.yml`,
+    `pyproject.toml`, `.gitattributes`, `.gitignore`.
+  - `ALWAYS_PROTECTED_PREFIXES` (whole subtrees): `fleetmcp/common/`,
     `.github/`.
 
   Services marked `protected: true` (`deploy-watcher`, `permission-manager`
@@ -172,7 +172,7 @@ backstop against a hostile agent is GitHub-side: branch protection
   mirrors this list (a test enforces that).
 - **Symlink- and junction-aware.** `write_file` checks the path as typed
   *and* the real target after resolving symlinks/junctions (relative to the
-  resolved workspace root). A link such as `innocent -> services/deploy_watcher`
+  resolved workspace root). A link such as `innocent -> fleetmcp/deploy_watcher`
   cannot be used to write a protected file.
 - **`.git/` is off-limits to the tools.** `read_file`, `write_file` and
   `run_tests` refuse any path with a `.git` component (case-insensitive,
@@ -262,6 +262,21 @@ backstop against a hostile agent is GitHub-side: branch protection
 These are documented, accepted gaps, not secrets — treat them as inputs to
 your own risk assessment, not as an invitation to assume they're fixed:
 
+- **The always-protected paths describe Fleet MCP's own repository, not
+  whatever repository Self-Dev MCP is pointed at.** `ALWAYS_PROTECTED_PATHS`
+  and `ALWAYS_PROTECTED_PREFIXES` in `fleetmcp/common/manifest.py` are a
+  fixed list of paths from *this* repository's own layout
+  (`fleetmcp/__init__.py`, `fleetmcp/common/`, and so on). When Self-Dev MCP
+  is configured against a different repository (a different
+  `SELF_DEV_REPO_REMOTE`/`GITHUB_REPO_FULL_NAME`), the `fleetmcp/...`
+  entries are inert there — that target repo has no `fleetmcp/` directory
+  for them to match — while the repository-shape-independent entries
+  (`.git`, `.github/`, `requirements*.txt`, `docker-compose.yml`,
+  `pyproject.toml`, `.gitattributes`, `.gitignore`, and anything the
+  *target* repo's own `fleet_manifest.yaml` marks `protected`) still apply.
+  Per-repository protected-path configuration (so the hardcoded list can
+  describe the target repo's own layout, not this one's) is roadmap, not
+  built yet.
 - **Probation doesn't survive a watcher restart.** The probation monitor is
   an in-process thread. If the Deploy Watcher process restarts mid-probation,
   the newly-promoted container keeps serving traffic but is no longer being
@@ -335,7 +350,7 @@ your own risk assessment, not as an invitation to assume they're fixed:
   internet, and put it behind the planned MCP gateway once that exists. See
   the Hardening checklist below.
 - **Docker socket access is root-equivalent, regardless of the watcher's
-  non-root user.** `services/deploy_watcher/entrypoint.sh` runs the watcher
+  non-root user.** `fleetmcp/deploy_watcher/entrypoint.sh` runs the watcher
   process as a non-root `watcher` user, but only after joining it to
   whichever group owns `/var/run/docker.sock` on the host. On Docker
   Desktop that socket is owned by GID 0 (`root`), so `watcher` joins the
@@ -360,7 +375,7 @@ Before pointing Fleet MCP at a repository you care about:
       user or a GitHub App), never the owner's PAT.
 - [ ] Replace the `@OWNER` placeholder in `.github/CODEOWNERS` (it already
       covers the protected core: every `ALWAYS_PROTECTED_PATHS` file, the
-      `services/common/` and `.github/` subtrees, the deploy watcher,
+      `fleetmcp/common/` and `.github/` subtrees, the deploy watcher,
       permission manager and gateway directories, and `SECURITY.md`) with a
       real human owner. Code-owner review cannot be enforced until you do.
 - [ ] Use fine-grained tokens on this repo only: `SELF_DEV_GITHUB_TOKEN` with
