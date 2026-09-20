@@ -163,6 +163,22 @@ def test_prog_name_strips_windows_exe_suffix(monkeypatch):
     assert server._prog_name() == "flotilla-mcp"
 
 
+@pytest.mark.parametrize(
+    "argv0, expected",
+    [
+        ("/usr/local/bin/flotilla-self-dev", "flotilla-self-dev"),
+        ("C:\\venv\\Scripts\\flotilla-mcp.exe", "flotilla-mcp"),
+        ("flotilla-mcp", "flotilla-mcp"),
+        ("", "flotilla-mcp"),
+    ],
+)
+def test_prog_name_handles_both_separators_on_any_platform(monkeypatch, argv0, expected):
+    # A Windows-style argv[0] has to resolve on POSIX too: os.path.basename is
+    # platform-dependent and returned the whole string on Linux, which CI caught.
+    monkeypatch.setattr(server.sys, "argv", [argv0])
+    assert server._prog_name() == expected
+
+
 def test_main_missing_env_var_message_uses_invoked_prog_name(monkeypatch, tmp_path, capsys):
     manifest = tmp_path / "fleet_manifest.yaml"
     manifest.write_text("services: {}\n", encoding="utf-8")

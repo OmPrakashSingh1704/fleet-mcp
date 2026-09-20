@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -57,7 +58,10 @@ def _prog_name() -> str:
     """The invoked program name, for messages -- so `uvx flotilla-mcp` says
     "flotilla-mcp:" and `flotilla-self-dev` says "flotilla-self-dev:",
     instead of a name hardcoded to one of the two console-script aliases."""
-    name = os.path.basename(sys.argv[0])
+    # Split on both separators rather than os.path.basename: a Windows-style
+    # argv[0] must still resolve correctly when this runs on POSIX (and vice
+    # versa), which os.path.basename does not do.
+    name = re.split(r"[\\/]", sys.argv[0] or "")[-1]
     if name.lower().endswith(".exe"):
         name = name[: -len(".exe")]
     return name or "flotilla-mcp"
