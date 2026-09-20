@@ -9,7 +9,7 @@ against your actual repository is a manual, one-time acceptance step, not
 something the suite automates.
 
 Run through this checklist once, against your own fork or repo, before
-trusting Fleet MCP with real issues.
+trusting Flotilla MCP with real issues.
 
 ## Preconditions (do not skip)
 
@@ -34,15 +34,14 @@ the GitHub API, so the preconditions above are the real backstop.
 ## Steps
 
 1. **Create a `self-dev`-labeled issue** in your GitHub repo describing a
-   small, safe change (e.g. a fix in `fleetmcp/fixture_hello_mcp`).
+   small, safe change (e.g. a fix in `flotilla_mcp/fixture_hello_mcp`).
 2. **Drive Self-Dev MCP to a PR**: call `list_assigned_issues`,
    `start_issue`, `write_file`, `run_tests`, and `submit_pr` against
    that issue and confirm a real pull request appears on
    `selfdev/issue-N`.
-3. **Verify CI and the required review block the merge** (requires branch
-   protection enabled per
-   [CONTRIBUTING.md#enabling-branch-protection](../CONTRIBUTING.md#enabling-branch-protection)
-   and `@OWNER` replaced in `.github/CODEOWNERS`): confirm the PR cannot be
+3. **Verify CI and the required review block the merge** (requires
+   [branch protection enabled](../CONTRIBUTING.md#enabling-branch-protection)):
+   confirm the PR cannot be
    merged until CI passes and a human review is submitted.
    Also confirm the PR's author is the bot identity, not the owner.
 4. **Merge** the PR once CI is green and it's approved.

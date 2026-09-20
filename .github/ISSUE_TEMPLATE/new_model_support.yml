@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         **Never paste an API key, token, or other credential into this
-        issue.** Issues are public. If Fleet MCP needs to exercise the
+        issue.** Issues are public. If Flotilla MCP needs to exercise the
         provider's API during development, a maintainer or the future
         Model Manager / credentials-manager flow will ask for it through a
         private channel, not a GitHub issue field.

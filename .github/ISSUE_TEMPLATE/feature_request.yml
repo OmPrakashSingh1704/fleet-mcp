@@ -1,5 +1,5 @@
 name: Feature request
-description: Propose a new capability or improvement for Fleet MCP.
+description: Propose a new capability or improvement for Flotilla MCP.
 title: "[Feature] "
 labels: ["enhancement"]
 body:
@@ -29,7 +29,7 @@ body:
   - type: dropdown
     id: area
     attributes:
-      label: Which part of Fleet MCP does this affect?
+      label: Which part of Flotilla MCP does this affect?
       options:
         - Self-Dev MCP
         - Deploy Watcher

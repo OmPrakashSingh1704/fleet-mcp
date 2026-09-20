@@ -1,4 +1,4 @@
-from fleetmcp.fixture_hello_mcp.server import app
+from flotilla_mcp.fixture_hello_mcp.server import app
 
 
 def test_health_endpoint_returns_ok():

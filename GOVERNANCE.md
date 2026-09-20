@@ -1,6 +1,6 @@
 # Governance
 
-Fleet MCP is currently maintained by a small group of maintainers with
+Flotilla MCP is currently maintained by a small group of maintainers with
 commit access to this repository. This document describes how decisions get
 made and, specifically, the rule that constrains automation the same way it
 constrains people.
@@ -9,12 +9,11 @@ constrains people.
 
 Maintainers are the individuals listed as code owners in
 [`.github/CODEOWNERS`](.github/CODEOWNERS), which now exists in this
-repository. Its owner is still the `@OWNER` placeholder, though, so until
-someone replaces it with a real GitHub user or team (and a repo admin
-enables branch protection — see
-[CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection)),
-code-owner review cannot actually be enforced. Until both of those are done,
-the maintainers are the people with write access to this repository, and any
+repository and names the repo owner, `@OmPrakashSingh1704`. Code-owner
+review still cannot actually be enforced until a repo admin enables branch
+protection — see
+[CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection).
+Until that's done, the maintainers are the people with write access to this repository, and any
 substantial change to project direction should go through a pull request
 and issue discussion rather than a direct push, so it's visible and
 reviewable regardless of who technically could have pushed directly.
@@ -43,7 +42,7 @@ reviewable regardless of who technically could have pushed directly.
 
 This is the one governance rule that isn't a matter of maintainer judgment:
 **changes to the protected core (`fleet_manifest.yaml`,
-`fleetmcp/common/manifest.py`, and any service marked `protected: true` in
+`flotilla_mcp/common/manifest.py`, and any service marked `protected: true` in
 the manifest) require a maintainer's review and approval, and can never be
 merged by an automated process** — not Self-Dev MCP, not any future
 extension of it, regardless of what task it was given or what an
@@ -55,8 +54,9 @@ approving any change that does reach those paths through a different route)
 are meant to hold independently of each other. Neither is allowed to become
 the only thing standing between an agent and the protected core. The
 CODEOWNERS file and CI workflow that back the process-level enforcement now
-exist; the repo admin still has to replace the `@OWNER` placeholder and
-enable branch protection before that enforcement is actually active — see
+exist, and CODEOWNERS names a real owner, `@OmPrakashSingh1704`; the repo
+admin still has to enable branch protection before that enforcement is
+actually active — see
 [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection).
 
 ## Adding or removing a maintainer
@@ -68,7 +68,7 @@ be removed by consensus of the remaining maintainers.
 
 ## Releases
 
-Publishing a `fleetmcp` release to PyPI requires the same human-approval
+Publishing a `flotilla-mcp` release to PyPI requires the same human-approval
 gate as any other change reaching `main`, plus one more: the `pypi`
 GitHub environment used by `.github/workflows/release.yml` requires the
 repository owner's manual approval before the publish job runs, in addition

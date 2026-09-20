@@ -3,7 +3,7 @@
 # http://<service>-<sha>:8080/health on the mcp-fleet network.
 services:
   fixture-hello-mcp:
-    path: fleetmcp/fixture_hello_mcp
+    path: flotilla_mcp/fixture_hello_mcp
     protected: false
     container: fixture-hello-mcp
     health_check: http://fixture-hello-mcp:8080/health
@@ -11,14 +11,14 @@ services:
   # watcher skips it. An operator updates it with `docker compose up --build`
   # (see ARCHITECTURE.md and SECURITY.md#known-limitations).
   self-dev-mcp:
-    path: fleetmcp/self_dev_mcp
+    path: flotilla_mcp/self_dev_mcp
     protected: false
   deploy-watcher:
-    path: fleetmcp/deploy_watcher
+    path: flotilla_mcp/deploy_watcher
     protected: true
   permission-manager:
-    path: fleetmcp/permission_manager
+    path: flotilla_mcp/permission_manager
     protected: true
   mcp-gateway:
-    path: fleetmcp/mcp_gateway
+    path: flotilla_mcp/mcp_gateway
     protected: true

@@ -17,11 +17,11 @@ from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 
-from fleetmcp import __version__
-from fleetmcp.common.manifest import FleetManifest
-from fleetmcp.self_dev_mcp.attempt_tracker import AttemptsExhaustedError, AttemptTracker
-from fleetmcp.self_dev_mcp.config import load_settings
-from fleetmcp.self_dev_mcp.git_ops import (
+from flotilla_mcp import __version__
+from flotilla_mcp.common.manifest import FleetManifest
+from flotilla_mcp.self_dev_mcp.attempt_tracker import AttemptsExhaustedError, AttemptTracker
+from flotilla_mcp.self_dev_mcp.config import load_settings
+from flotilla_mcp.self_dev_mcp.git_ops import (
     GitOpsError,
     checkout_remote_branch,
     commit_all,
@@ -29,17 +29,17 @@ from fleetmcp.self_dev_mcp.git_ops import (
     push,
     remote_branch_exists,
 )
-from fleetmcp.self_dev_mcp.github_client import GitHubClient
-from fleetmcp.self_dev_mcp.tools import DEFAULT_TEST_TIMEOUT_SECONDS, ProtectedPathError, validate_test_path
-from fleetmcp.self_dev_mcp.tools import read_file as _read_file
-from fleetmcp.self_dev_mcp.tools import run_local_tests as _run_local_tests
-from fleetmcp.self_dev_mcp.tools import write_file as _write_file
-from fleetmcp.self_dev_mcp.workspace import create_workspace, destroy_workspace
+from flotilla_mcp.self_dev_mcp.github_client import GitHubClient
+from flotilla_mcp.self_dev_mcp.tools import DEFAULT_TEST_TIMEOUT_SECONDS, ProtectedPathError, validate_test_path
+from flotilla_mcp.self_dev_mcp.tools import read_file as _read_file
+from flotilla_mcp.self_dev_mcp.tools import run_local_tests as _run_local_tests
+from flotilla_mcp.self_dev_mcp.tools import write_file as _write_file
+from flotilla_mcp.self_dev_mcp.workspace import create_workspace, destroy_workspace
 
 # Policy-denial audit trail (spec-required): every REFUSED / EXHAUSTED
 # decision is logged here. Only the repr of the requested path is logged --
 # never file content.
-audit_logger = logging.getLogger("fleet_mcp.audit")
+audit_logger = logging.getLogger("flotilla_mcp.audit")
 
 # GitHub-facing errors a handler converts to "ERROR: ..." instead of raising
 # (never-raise contract for MCP tool handlers).
@@ -327,7 +327,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> None:
-    # Logs -- including the fleet_mcp.audit policy-denial trail -- go to
+    # Logs -- including the flotilla_mcp.audit policy-denial trail -- go to
     # stderr: with --transport stdio, stdout is the MCP protocol channel.
     logging.basicConfig(
         level=logging.INFO,
@@ -338,7 +338,7 @@ def main(argv: list[str] | None = None) -> None:
 
     # Validate configuration up front, with a friendly one-shot message
     # instead of a raw traceback out of site-packages -- this is most
-    # people's first run after `pip install fleetmcp` / `uvx fleetmcp`.
+    # people's first run after `pip install flotilla-mcp` / `uvx flotilla-mcp`.
     # load_settings() is checked here, separately from build_mcp_app()
     # (which calls it again -- a cheap, side-effect-free re-read of the
     # same env vars), so a KeyError from something else entirely -- e.g. a
@@ -349,7 +349,7 @@ def main(argv: list[str] | None = None) -> None:
     except KeyError as exc:
         var = exc.args[0] if exc.args else exc
         print(
-            f"fleetmcp-self-dev: missing required environment variable {var!r}.\n"
+            f"flotilla-self-dev: missing required environment variable {var!r}.\n"
             "See the Install section in README.md and .env.example for the "
             "full list of required and optional variables.",
             file=sys.stderr,
@@ -366,7 +366,7 @@ def main(argv: list[str] | None = None) -> None:
     except FileNotFoundError as exc:
         path = exc.filename or manifest_path()
         print(
-            f"fleetmcp-self-dev: fleet manifest not found at {path!r}.\n"
+            f"flotilla-self-dev: fleet manifest not found at {path!r}.\n"
             "Set FLEET_MANIFEST_PATH to point at your fleet_manifest.yaml, "
             "or run from a directory that has one -- see the Install section "
             "in README.md.",

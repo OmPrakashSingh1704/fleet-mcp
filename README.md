@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
-    <img src="assets/logo.svg" alt="Fleet MCP" width="420">
+    <img src="assets/logo.svg" alt="Flotilla MCP" width="425">
   </picture>
 </p>
 
@@ -14,7 +14,7 @@
   <a href="CONTRIBUTING.md"><img alt="Contributions welcome" src="https://img.shields.io/badge/contributions-welcome-teal.svg"></a>
 </p>
 
-Fleet MCP is a fleet of [Model Context Protocol](https://modelcontextprotocol.io)
+Flotilla MCP is a fleet of [Model Context Protocol](https://modelcontextprotocol.io)
 servers that can read GitHub issues, edit its own source, open pull requests,
 and — once a human merges the change — redeploy itself, without ever being
 able to take the fleet down or disarm its own safety controls. The parts of
@@ -34,37 +34,37 @@ what isn't yet.
 Self-Dev MCP only:
 
 ```bash
-pip install fleetmcp
+pip install flotilla-mcp
 ```
 
 Self-Dev MCP plus the Deploy Watcher (needs the Docker SDK):
 
 ```bash
-pip install "fleetmcp[watcher]"
+pip install "flotilla-mcp[watcher]"
 ```
 
 Or run it without installing anything, via [uvx](https://docs.astral.sh/uv/guides/tools/):
 
 ```bash
-uvx fleetmcp
+uvx flotilla-mcp
 ```
 
 This installs three console scripts:
 
-- `fleetmcp` and `fleetmcp-self-dev` (identical — two names for the same
-  entry point) — the Self-Dev MCP server: `fleetmcp-self-dev --transport
+- `flotilla-mcp` and `flotilla-self-dev` (identical — two names for the same
+  entry point) — the Self-Dev MCP server: `flotilla-self-dev --transport
   stdio|http` (default `stdio`; `--transport http` serves `/health` on port
   8080 for container health checks); `--version` prints the installed
   version.
-- `fleetmcp-watcher` — the Deploy Watcher. Needs
-  `pip install "fleetmcp[watcher]"`; without the `docker` package installed,
-  it prints `fleetmcp-watcher needs the Docker SDK. Install it with: pip
-  install "fleetmcp[watcher]"` and exits rather than crashing with an import
+- `flotilla-watcher` — the Deploy Watcher. Needs
+  `pip install "flotilla-mcp[watcher]"`; without the `docker` package installed,
+  it prints `flotilla-watcher needs the Docker SDK. Install it with: pip
+  install "flotilla-mcp[watcher]"` and exits rather than crashing with an import
   traceback.
 
 Self-Dev MCP reads its configuration from environment variables (see
 [.env.example](.env.example) and
-[fleetmcp/self_dev_mcp/config.py](fleetmcp/self_dev_mcp/config.py)):
+[flotilla_mcp/self_dev_mcp/config.py](flotilla_mcp/self_dev_mcp/config.py)):
 
 | Variable | Required | Meaning |
 |---|---|---|
@@ -81,7 +81,7 @@ before pointing this at a repository you care about.
 
 ## Use with an MCP client
 
-Both snippets below point `uvx` at the `fleetmcp` PyPI package and pass
+Both snippets below point `uvx` at the `flotilla-mcp` PyPI package and pass
 configuration through environment variables — see
 [SECURITY.md#preconditions-before-pointing-a-live-agent-at-a-repo](SECURITY.md#preconditions-before-pointing-a-live-agent-at-a-repo)
 first.
@@ -93,9 +93,9 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
-    "fleetmcp": {
+    "flotilla-mcp": {
       "command": "uvx",
-      "args": ["fleetmcp"],
+      "args": ["flotilla-mcp"],
       "env": {
         "SELF_DEV_GITHUB_TOKEN": "<fine-grained token>",
         "GITHUB_REPO_FULL_NAME": "owner/repo",
@@ -116,10 +116,10 @@ scripting the command form. The JSON form above is not client-specific —
 paste the same `mcpServers` block into whatever configuration surface your
 `claude` CLI version reads for MCP servers.
 
-## Why Fleet MCP
+## Why Flotilla MCP
 
 Most "self-modifying agent" demos either can't touch production or can touch
-too much of it. Fleet MCP is built around one design principle: **the agent
+too much of it. Flotilla MCP is built around one design principle: **the agent
 reasons, MCP servers provide capabilities, and guardrails sit in between,
 independent of the agent's own judgment.**
 
@@ -150,12 +150,12 @@ are in place.
 
 **Implemented today:**
 
-- **Protected-core enforcement** (`fleetmcp/common/manifest.py`): a fleet
+- **Protected-core enforcement** (`flotilla_mcp/common/manifest.py`): a fleet
   manifest defines which services and paths are off-limits. A hardcoded
   core is protected no matter what the manifest says: the manifest, its
-  loader, `fleetmcp/__init__.py`, `requirements.txt`,
+  loader, `flotilla_mcp/__init__.py`, `requirements.txt`,
   `requirements-dev.txt`, `docker-compose.yml`, `pyproject.toml`,
-  `.gitattributes`, `.gitignore`, and the whole `fleetmcp/common/` and
+  `.gitattributes`, `.gitignore`, and the whole `flotilla_mcp/common/` and
   `.github/` trees. Path checks canonicalize
   separators, `..` segments, NTFS aliases and case, and are applied to the
   symlink-resolved target too.
@@ -257,8 +257,8 @@ A small set of things can never be edited by the Self-Dev MCP, no matter
 what an agent's reasoning concludes it should do:
 
 - The **fleet manifest** (`fleet_manifest.yaml`), the **manifest loader**
-  (`fleetmcp/common/manifest.py`) and everything else in `fleetmcp/common/`,
-  plus the build/dependency files (`fleetmcp/__init__.py`,
+  (`flotilla_mcp/common/manifest.py`) and everything else in `flotilla_mcp/common/`,
+  plus the build/dependency files (`flotilla_mcp/__init__.py`,
   `requirements.txt`, `requirements-dev.txt`, `docker-compose.yml`,
   `pyproject.toml`, `.gitattributes`, `.gitignore`) and CI/CODEOWNERS
   (`.github/`). These are
@@ -315,8 +315,8 @@ authored by the owner, and a sole owner can't approve their own PR under
 ### Run the test suite (works today)
 
 ```bash
-git clone https://github.com/OmPrakashSingh1704/fleet-mcp.git
-cd fleet-mcp
+git clone https://github.com/OmPrakashSingh1704/flotilla-mcp.git
+cd flotilla-mcp
 python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate on Windows
 pip install -r requirements-dev.txt
 python -m pytest tests -m "not docker" -v -W error::DeprecationWarning -W error::pytest.PytestUnhandledCoroutineWarning
@@ -380,7 +380,7 @@ return an `"ERROR: ..."` string until `SELF_DEV_GITHUB_TOKEN` and
 ## Repo layout
 
 ```
-fleetmcp/
+flotilla_mcp/
   common/manifest.py        fleet manifest loader + protected-path engine
   self_dev_mcp/              Self-Dev MCP: git ops, workspace, tools, server,
                                 Dockerfile
@@ -389,7 +389,7 @@ fleetmcp/
                                 Dockerfile, entrypoint.sh
   fixture_hello_mcp/          fixture Flask service + Dockerfile, used as the
                                 Deploy Watcher's local smoke-test target
-tests/                      unit tests, mirroring the fleetmcp/ layout
+tests/                      unit tests, mirroring the flotilla_mcp/ layout
 docs/design/                design documents (historical / planned; code and
                               ARCHITECTURE.md are authoritative)
 fleet_manifest.yaml         the fleet manifest (protected)
@@ -406,7 +406,7 @@ docker-compose.yml          local fleet: mcp-fleet network + all three services 
 | Deploy Watcher (blue/green, probation, rollback, known-good floor) | Built |
 | Docker Compose + per-service Dockerfiles | Built |
 | Self-Dev MCP HTTP transport (`--transport http`) | Built |
-| CI workflow + CODEOWNERS | Built (the CODEOWNERS owner is a placeholder — `@OWNER` — and branch protection must still be enabled by the repo admin; see [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection)) |
+| CI workflow + CODEOWNERS | Built (CODEOWNERS names a real owner, `@OmPrakashSingh1704`; branch protection must still be enabled by the repo admin for that review to be enforced, rather than advisory; see [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection)) |
 | MCP gateway | Planned |
 | Permission manager | Planned |
 | `model-adapters-mcp` | Planned |
@@ -434,7 +434,7 @@ verification pass.
 - [GOVERNANCE.md](GOVERNANCE.md) — maintainers and decision-making
 - [SUPPORT.md](SUPPORT.md) — where to ask for help
 - [CHANGELOG.md](CHANGELOG.md)
-- [RELEASING.md](RELEASING.md) — how a `fleetmcp` release is cut and
+- [RELEASING.md](RELEASING.md) — how a `flotilla-mcp` release is cut and
   published to PyPI
 
 ## License

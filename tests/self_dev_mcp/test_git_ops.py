@@ -1,6 +1,6 @@
 import subprocess
 
-from fleetmcp.self_dev_mcp import git_ops
+from flotilla_mcp.self_dev_mcp import git_ops
 
 
 def _init_bare_remote(tmp_path) -> str:
@@ -126,7 +126,7 @@ def _ok(*args, **kwargs):
 
 def _capture_git_calls(monkeypatch, fn):
     monkeypatch.setenv("SELF_DEV_GITHUB_TOKEN", SECRET)
-    with patch("fleetmcp.self_dev_mcp.git_ops.subprocess.run", side_effect=_ok) as mock_run:
+    with patch("flotilla_mcp.self_dev_mcp.git_ops.subprocess.run", side_effect=_ok) as mock_run:
         fn()
     return mock_run.call_args_list
 
@@ -183,7 +183,7 @@ def test_git_ops_error_redacts_credentials_remote_and_token(monkeypatch):
     def fail(*args, **kwargs):
         return subprocess.CompletedProcess(args=args[0], returncode=128, stdout="", stderr=stderr)
 
-    with patch("fleetmcp.self_dev_mcp.git_ops.subprocess.run", side_effect=fail):
+    with patch("flotilla_mcp.self_dev_mcp.git_ops.subprocess.run", side_effect=fail):
         with pytest.raises(git_ops.GitOpsError) as exc_info:
             git_ops.clone(remote, "/tmp/ws")
 
@@ -205,7 +205,7 @@ def test_git_ops_error_redacts_configured_remote_on_non_clone_ops(monkeypatch):
             args=args[0], returncode=1, stdout="", stderr="fatal: 'https://github.com/org/private.git' denied"
         )
 
-    with patch("fleetmcp.self_dev_mcp.git_ops.subprocess.run", side_effect=fail):
+    with patch("flotilla_mcp.self_dev_mcp.git_ops.subprocess.run", side_effect=fail):
         with pytest.raises(git_ops.GitOpsError) as exc_info:
             git_ops.push("/tmp/ws", "selfdev/issue-1")
 

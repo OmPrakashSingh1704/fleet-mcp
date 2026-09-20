@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 100" role="img" aria-labelledby="fm-logod-title fm-logod-desc">
-  <title id="fm-logod-title">Fleet MCP</title>
-  <desc id="fm-logod-desc">Fleet MCP logo, dark theme: a slate-blue cargo ship carrying two tiers of teal server containers over a teal wave line, beside the wordmark "Fleet MCP".</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 425 100" role="img" aria-labelledby="fm-logod-title fm-logod-desc">
+  <title id="fm-logod-title">Flotilla MCP</title>
+  <desc id="fm-logod-desc">Flotilla MCP logo, dark theme: a slate-blue cargo ship carrying two tiers of teal server containers over a teal wave line, beside the wordmark "Flotilla MCP".</desc>
   <g transform="translate(6,6) scale(1.4)">
     <g transform="translate(0,-3)">
       <g fill="#2DD4BF">
@@ -22,5 +22,5 @@
       <path d="M3,54 Q9,50 15,54 T27,54 T39,54 T51,54 T63,54" fill="none" stroke="#2DD4BF" stroke-width="3" stroke-linecap="round"/>
     </g>
   </g>
-  <text x="108" y="66" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="46" font-weight="700" fill="#F1F5F9">Fleet <tspan fill="#2DD4BF">MCP</tspan></text>
+  <text x="108" y="66" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="46" font-weight="700" fill="#F1F5F9">Flotilla <tspan fill="#2DD4BF">MCP</tspan></text>
 </svg>

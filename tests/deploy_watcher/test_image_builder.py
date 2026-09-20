@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from fleetmcp.deploy_watcher.image_builder import build_image
+from flotilla_mcp.deploy_watcher.image_builder import build_image
 
 
 def test_build_image_delegates_to_docker_client_and_returns_image_id():
@@ -11,14 +11,14 @@ def test_build_image_delegates_to_docker_client_and_returns_image_id():
     image_id = build_image(
         docker_client,
         context_path=".",
-        dockerfile="fleetmcp/fixture_hello_mcp/Dockerfile",
+        dockerfile="flotilla_mcp/fixture_hello_mcp/Dockerfile",
         tag="fixture-hello-mcp:abc123",
     )
 
     assert image_id == "sha256:abc123"
     docker_client.images.build.assert_called_once_with(
         path=".",
-        dockerfile="fleetmcp/fixture_hello_mcp/Dockerfile",
+        dockerfile="flotilla_mcp/fixture_hello_mcp/Dockerfile",
         tag="fixture-hello-mcp:abc123",
         rm=True,
     )

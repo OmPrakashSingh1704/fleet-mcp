@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in Fleet MCP isn't working as documented.
+description: Something in Flotilla MCP isn't working as documented.
 title: "[Bug] "
 labels: ["bug"]
 body:
@@ -35,7 +35,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Fleet MCP version / commit
+      label: Flotilla MCP version / commit
       placeholder: v0.1.0 or commit sha
     validations:
       required: true

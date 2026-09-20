@@ -1,4 +1,4 @@
-from fleetmcp.self_dev_mcp import server
+from flotilla_mcp.self_dev_mcp import server
 
 
 def test_manifest_path_defaults_to_cwd_file(monkeypatch):

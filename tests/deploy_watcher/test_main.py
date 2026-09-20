@@ -2,8 +2,8 @@ from unittest.mock import MagicMock, patch
 
 import yaml
 
-from fleetmcp.deploy_watcher.deploy_manager import DeployResult
-from fleetmcp.deploy_watcher.main import _loop_iteration, run_once
+from flotilla_mcp.deploy_watcher.deploy_manager import DeployResult
+from flotilla_mcp.deploy_watcher.main import _loop_iteration, run_once
 
 _MANIFEST_YAML = """
 services:
@@ -151,9 +151,9 @@ def test_loop_iteration_swallows_unexpected_error_and_does_not_propagate(tmp_pat
     checkout_fn = MagicMock()
 
     with patch(
-        "fleetmcp.deploy_watcher.main.run_once",
+        "flotilla_mcp.deploy_watcher.main.run_once",
         side_effect=yaml.YAMLError("bad manifest"),
-    ) as mock_run_once, patch("fleetmcp.deploy_watcher.main._logger") as mock_logger:
+    ) as mock_run_once, patch("flotilla_mcp.deploy_watcher.main._logger") as mock_logger:
         _loop_iteration(poller, manager, checkout_fn, "git@remote", str(tmp_path))
 
     mock_run_once.assert_called_once()
@@ -170,7 +170,7 @@ class _StopLoop(Exception):
 def test_run_uses_watcher_github_token_not_shared_token(monkeypatch):
     import pytest as _pytest
 
-    from fleetmcp.deploy_watcher import main as watcher_main
+    from flotilla_mcp.deploy_watcher import main as watcher_main
 
     monkeypatch.setenv("WATCHER_GITHUB_TOKEN", "watcher-token")
     monkeypatch.setenv("GITHUB_TOKEN", "old-shared-token")
@@ -192,7 +192,7 @@ def test_run_uses_watcher_github_token_not_shared_token(monkeypatch):
 def test_run_requires_watcher_github_token(monkeypatch):
     import pytest as _pytest
 
-    from fleetmcp.deploy_watcher import main as watcher_main
+    from flotilla_mcp.deploy_watcher import main as watcher_main
 
     monkeypatch.delenv("WATCHER_GITHUB_TOKEN", raising=False)
     monkeypatch.setenv("GITHUB_TOKEN", "old-shared-token")

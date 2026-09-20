@@ -3,9 +3,9 @@ import sys
 
 import pytest
 
-from fleetmcp.common.manifest import FleetManifest
-from fleetmcp.self_dev_mcp.attempt_tracker import AttemptTracker, AttemptsExhaustedError
-from fleetmcp.self_dev_mcp import tools
+from flotilla_mcp.common.manifest import FleetManifest
+from flotilla_mcp.self_dev_mcp.attempt_tracker import AttemptTracker, AttemptsExhaustedError
+from flotilla_mcp.self_dev_mcp import tools
 
 
 def _manifest_with_protected_deploy_watcher(tmp_path):
@@ -13,7 +13,7 @@ def _manifest_with_protected_deploy_watcher(tmp_path):
     manifest_path.write_text(
         "services:\n"
         "  deploy-watcher:\n"
-        "    path: fleetmcp/deploy_watcher\n"
+        "    path: flotilla_mcp/deploy_watcher\n"
         "    protected: true\n"
     )
     return FleetManifest.load(str(manifest_path))
@@ -28,14 +28,14 @@ def test_write_file_refuses_protected_path(tmp_path):
     with pytest.raises(tools.ProtectedPathError):
         tools.write_file(
             str(workspace),
-            "fleetmcp/deploy_watcher/deploy_manager.py",
+            "flotilla_mcp/deploy_watcher/deploy_manager.py",
             "malicious content",
             manifest,
             "issue-1",
             tracker,
         )
 
-    assert not (workspace / "fleetmcp" / "deploy_watcher" / "deploy_manager.py").exists()
+    assert not (workspace / "flotilla_mcp" / "deploy_watcher" / "deploy_manager.py").exists()
 
 
 def test_write_file_refuses_hardcoded_protected_path_even_with_permissive_manifest(tmp_path):
@@ -58,9 +58,9 @@ def test_write_file_succeeds_for_unprotected_path(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
 
-    tools.write_file(str(workspace), "fleetmcp/fixture_hello_mcp/server.py", "print('hi')", manifest, "issue-1", tracker)
+    tools.write_file(str(workspace), "flotilla_mcp/fixture_hello_mcp/server.py", "print('hi')", manifest, "issue-1", tracker)
 
-    written = workspace / "fleetmcp" / "fixture_hello_mcp" / "server.py"
+    written = workspace / "flotilla_mcp" / "fixture_hello_mcp" / "server.py"
     assert written.read_text() == "print('hi')"
 
 
@@ -276,7 +276,7 @@ def test_write_file_refuses_protected_path_reached_through_directory_link(tmp_pa
     manifest = _manifest_with_protected_deploy_watcher(tmp_path)
     tracker = AttemptTracker(max_attempts=5)
     workspace = tmp_path / "workspace"
-    protected_dir = workspace / "fleetmcp" / "deploy_watcher"
+    protected_dir = workspace / "flotilla_mcp" / "deploy_watcher"
     protected_dir.mkdir(parents=True)
     (protected_dir / "main.py").write_text("original\n")
     _make_dir_link(workspace / "innocent", protected_dir)
@@ -327,19 +327,19 @@ def test_write_file_refuses_always_protected_file_via_file_symlink(tmp_path):
 @pytest.mark.parametrize(
     "path",
     [
-        "fleetmcp/__init__.py",
+        "flotilla_mcp/__init__.py",
         "requirements.txt",
         "docker-compose.yml",
         "pyproject.toml",
         ".gitattributes",
         ".gitignore",
-        "fleetmcp/common/new_module.py",
-        "fleetmcp/common/__init__.py",
+        "flotilla_mcp/common/new_module.py",
+        "flotilla_mcp/common/__init__.py",
         ".github/workflows/test.yml",
         ".github/CODEOWNERS",
         "Requirements.TXT",
         ".GitHub/workflows/x.yml",
-        "fleetmcp/Common/x.py",
+        "flotilla_mcp/Common/x.py",
     ],
 )
 def test_write_file_refuses_expanded_protected_core(tmp_path, path):

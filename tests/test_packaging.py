@@ -5,13 +5,13 @@ import zipfile
 
 import pytest
 
-import fleetmcp
+import flotilla_mcp
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 def test_version_is_semver():
-    parts = fleetmcp.__version__.split(".")
+    parts = flotilla_mcp.__version__.split(".")
     assert len(parts) == 3 and all(p.isdigit() for p in parts)
 
 
@@ -25,15 +25,15 @@ def wheel(tmp_path_factory):
         )
     except subprocess.CalledProcessError as e:
         pytest.fail(f"wheel build failed:\n{e.stdout}\n{e.stderr}")
-    (whl,) = out.glob("fleetmcp-*.whl")
+    (whl,) = out.glob("flotilla_mcp-*.whl")
     return whl
 
 
 def test_wheel_contents(wheel):
     names = zipfile.ZipFile(wheel).namelist()
-    assert "fleetmcp/common/manifest.py" in names
-    assert "fleetmcp/self_dev_mcp/server.py" in names
-    assert "fleetmcp/deploy_watcher/cli.py" in names
+    assert "flotilla_mcp/common/manifest.py" in names
+    assert "flotilla_mcp/self_dev_mcp/server.py" in names
+    assert "flotilla_mcp/deploy_watcher/cli.py" in names
     assert not any("fixture_hello_mcp" in n for n in names)
     assert not any(n.endswith("Dockerfile") or n.endswith("entrypoint.sh") for n in names)
     assert not any(n.startswith("tests/") for n in names)
@@ -43,13 +43,13 @@ def test_wheel_metadata(wheel):
     zf = zipfile.ZipFile(wheel)
     meta = next(n for n in zf.namelist() if n.endswith(".dist-info/METADATA"))
     text = zf.read(meta).decode()
-    assert "Name: fleetmcp" in text
-    assert f"Version: {fleetmcp.__version__}" in text
+    assert "Name: flotilla-mcp" in text
+    assert f"Version: {flotilla_mcp.__version__}" in text
     assert "Provides-Extra: watcher" in text
     ep = zf.read(next(n for n in zf.namelist() if n.endswith("entry_points.txt"))).decode()
-    for line in ("fleetmcp = fleetmcp.self_dev_mcp.server:main",
-                 "fleetmcp-self-dev = fleetmcp.self_dev_mcp.server:main",
-                 "fleetmcp-watcher = fleetmcp.deploy_watcher.cli:main"):
+    for line in ("flotilla-mcp = flotilla_mcp.self_dev_mcp.server:main",
+                 "flotilla-self-dev = flotilla_mcp.self_dev_mcp.server:main",
+                 "flotilla-watcher = flotilla_mcp.deploy_watcher.cli:main"):
         assert line in ep
 
 
@@ -69,10 +69,10 @@ def test_wheel_readme_links_are_absolute(wheel):
     assert 'href="LICENSE"' not in long_description
     assert 'href="CONTRIBUTING.md"' not in long_description
     assert (
-        "https://raw.githubusercontent.com/OmPrakashSingh1704/fleet-mcp/main/assets/logo.svg"
+        "https://raw.githubusercontent.com/OmPrakashSingh1704/flotilla-mcp/main/assets/logo.svg"
         in long_description
     )
     assert (
-        "https://github.com/OmPrakashSingh1704/fleet-mcp/blob/main/LICENSE"
+        "https://github.com/OmPrakashSingh1704/flotilla-mcp/blob/main/LICENSE"
         in long_description
     )

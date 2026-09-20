@@ -22,7 +22,7 @@ jobs:
           cache: "pip"
           cache-dependency-path: requirements*.txt
       - run: pip install -r requirements-dev.txt
-      - name: Check tag matches fleetmcp.__version__
+      - name: Check tag matches flotilla_mcp.__version__
         env:
           REF_NAME: ${{ github.ref_name }}
         run: python scripts/check_tag_version.py "$REF_NAME"
@@ -43,8 +43,8 @@ jobs:
         run: |
           python -m venv /tmp/smoke
           /tmp/smoke/bin/pip install dist/*.whl
-          /tmp/smoke/bin/python -c "import fleetmcp; print(fleetmcp.__version__)"
-          /tmp/smoke/bin/fleetmcp-self-dev --version
+          /tmp/smoke/bin/python -c "import flotilla_mcp; print(flotilla_mcp.__version__)"
+          /tmp/smoke/bin/flotilla-self-dev --version
       - uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/fleetmcp
+      url: https://test.pypi.org/p/flotilla-mcp
     permissions:
       id-token: write
     steps:
@@ -74,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/fleetmcp
+      url: https://pypi.org/p/flotilla-mcp
     permissions:
       id-token: write
     steps:

@@ -3,7 +3,7 @@ requires = ["hatchling>=1.25", "hatch-fancy-pypi-readme>=24"]
 build-backend = "hatchling.build"
 
 [project]
-name = "fleetmcp"
+name = "flotilla-mcp"
 dynamic = ["version", "readme"]
 description = "A self-developing fleet of MCP servers, with guardrails."
 license = "Apache-2.0"
@@ -37,19 +37,19 @@ dependencies = [
 watcher = ["docker>=7.1,<8"]
 
 [project.scripts]
-fleetmcp = "fleetmcp.self_dev_mcp.server:main"
-fleetmcp-self-dev = "fleetmcp.self_dev_mcp.server:main"
-fleetmcp-watcher = "fleetmcp.deploy_watcher.cli:main"
+flotilla-mcp = "flotilla_mcp.self_dev_mcp.server:main"
+flotilla-self-dev = "flotilla_mcp.self_dev_mcp.server:main"
+flotilla-watcher = "flotilla_mcp.deploy_watcher.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/OmPrakashSingh1704/fleet-mcp"
-Source = "https://github.com/OmPrakashSingh1704/fleet-mcp"
-Issues = "https://github.com/OmPrakashSingh1704/fleet-mcp/issues"
-Changelog = "https://github.com/OmPrakashSingh1704/fleet-mcp/blob/main/CHANGELOG.md"
-Security = "https://github.com/OmPrakashSingh1704/fleet-mcp/blob/main/SECURITY.md"
+Homepage = "https://github.com/OmPrakashSingh1704/flotilla-mcp"
+Source = "https://github.com/OmPrakashSingh1704/flotilla-mcp"
+Issues = "https://github.com/OmPrakashSingh1704/flotilla-mcp/issues"
+Changelog = "https://github.com/OmPrakashSingh1704/flotilla-mcp/blob/main/CHANGELOG.md"
+Security = "https://github.com/OmPrakashSingh1704/flotilla-mcp/blob/main/SECURITY.md"
 
 [tool.hatch.version]
-path = "fleetmcp/__init__.py"
+path = "flotilla_mcp/__init__.py"
 
 # README.md keeps relative links so they work on GitHub; pypi.org does not
 # resolve relative links or images against a repository, so this hook
@@ -68,32 +68,32 @@ path = "README.md"
 # anchors ("](#...)").
 [[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
 pattern = '\]\((?!https?://|#)([^)]+)\)'
-replacement = '](https://github.com/OmPrakashSingh1704/fleet-mcp/blob/main/\1)'
+replacement = '](https://github.com/OmPrakashSingh1704/flotilla-mcp/blob/main/\1)'
 
 # The logo's <picture>/<img> src="assets/..." and srcset="assets/..." become
 # absolute raw.githubusercontent.com URLs.
 [[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
 pattern = '(src|srcset)="assets/'
-replacement = '\1="https://raw.githubusercontent.com/OmPrakashSingh1704/fleet-mcp/main/assets/'
+replacement = '\1="https://raw.githubusercontent.com/OmPrakashSingh1704/flotilla-mcp/main/assets/'
 
 # The badge <a href="LICENSE">/<a href="CONTRIBUTING.md"> wrappers become
 # absolute GitHub blob links, for the same reason as the markdown-link
 # substitution above (skips absolute URLs and in-page anchors).
 [[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
 pattern = '<a href="(?!https?://|#)([^"]+)"'
-replacement = '<a href="https://github.com/OmPrakashSingh1704/fleet-mcp/blob/main/\1"'
+replacement = '<a href="https://github.com/OmPrakashSingh1704/flotilla-mcp/blob/main/\1"'
 
 [tool.hatch.build.targets.wheel]
-packages = ["fleetmcp"]
+packages = ["flotilla_mcp"]
 exclude = [
-    "fleetmcp/fixture_hello_mcp",
+    "flotilla_mcp/fixture_hello_mcp",
     "**/Dockerfile",
     "**/entrypoint.sh",
 ]
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "fleetmcp",
+    "flotilla_mcp",
     "tests",
     "LICENSE",
     "NOTICE",
