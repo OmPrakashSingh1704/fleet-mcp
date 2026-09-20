@@ -94,8 +94,17 @@ jobs:
         with:
           name: dist
           path: dist/
-      - name: Create GitHub release
+      - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           REF_NAME: ${{ github.ref_name }}
-        run: gh release create "$REF_NAME" dist/* --repo "${{ github.repository }}" --title "$REF_NAME" --generate-notes --verify-tag
+        # Idempotent: a re-run of this job (e.g. after a transient failure
+        # downstream) must not fail just because the release already exists
+        # from a previous attempt -- upload the artifacts to it instead,
+        # clobbering any that were already uploaded.
+        run: |
+          if gh release view "$REF_NAME" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$REF_NAME" dist/* --repo "${{ github.repository }}" --clobber
+          else
+            gh release create "$REF_NAME" dist/* --repo "${{ github.repository }}" --title "$REF_NAME" --generate-notes --verify-tag
+          fi
