@@ -291,9 +291,10 @@ agent-written code executed by `run_tests` bypasses layers 1 and 2 entirely
    test enforces it), **and** a separate bot identity for self-dev, so the
    agent's PRs need someone else's approval. This is the real backstop,
    and it is external to this codebase. It is not active by default:
-   CODEOWNERS still names the `@OWNER` placeholder, a repo admin has to run
+   CODEOWNERS now names a real owner, but a repo admin still has to run
    the command in
-   [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection),
+   [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection)
+   to make code-owner review enforced instead of advisory,
    and on a private repo branch protection needs a paid GitHub plan. It is
    a stated
    [precondition](SECURITY.md#preconditions-before-pointing-a-live-agent-at-a-repo)

@@ -95,12 +95,11 @@ The protected core described in [ARCHITECTURE.md](ARCHITECTURE.md) and
 
 `.github/CODEOWNERS` mirrors all of these (plus `SECURITY.md`), and
 `tests/test_manifest.py` fails if a hardcoded entry is missing from it. If
-you add to the protected core, update both. Its owner is still the
-`@OWNER` placeholder — GitHub
-flags those entries as invalid until someone replaces `@OWNER` with a real
-GitHub user or team, and code-owner review can't be enforced until both that
-replacement and branch protection (see below) are done. Once both are in
-place, changes under those paths require sign-off from the designated owner,
+you add to the protected core, update both. Its owner is now the real
+GitHub user `@OmPrakashSingh1704`, so the entries are valid, but code-owner
+review still can't be enforced until branch protection (see below) is
+enabled. Once branch protection is on, changes under those paths require
+sign-off from the designated owner,
 in addition to normal review. This is by design: it's the human-side half of
 the same guarantee that the Self-Dev MCP's `write_file` tool refuses to
 touch those paths at all. If your PR touches protected-core paths, say so
@@ -115,28 +114,28 @@ apply the extra scrutiny.
 The repository is **private, on GitHub Pro**. Protection is turned on in
 this order:
 
-1. **The owner merges the foundation branch.** Until then there is no
+1. ~~The owner replaces the CODEOWNERS placeholder owner with
+   `@OmPrakashSingh1704`.~~ Done.
+2. **The owner merges the foundation branch.** Until then there is no
    protection on `main`.
-2. **Right after that merge**, `@OWNER` in `.github/CODEOWNERS` is replaced
-   with `@OmPrakashSingh1704`, and full branch protection is applied to
+3. **Right after that merge**, full branch protection is applied to
    `main` with the command below: required `test` check, 1 approving
    review, code-owner review, dismiss stale reviews, `enforce_admins`, no
    force-push, no deletions.
-3. **From then on, self-dev uses a separate bot identity** (a machine user
+4. **From then on, self-dev uses a separate bot identity** (a machine user
    or a GitHub App) for `SELF_DEV_GITHUB_TOKEN`, so its PRs are authored by
    the bot and the owner can approve them. A live agent is not pointed at
-   the repo before steps 2 and 3 are done.
+   the repo before steps 3 and 4 are done.
 
 ### Details
 
 The CI workflow (`.github/workflows/test.yml`, job id `test`) and
 `.github/CODEOWNERS` exist in this repository, but neither is enforced until
 a repo admin turns on branch protection for `main` — GitHub does not do this
-automatically just because the files exist. Before enabling it, replace the
-`@OWNER` placeholder in `.github/CODEOWNERS` with a real GitHub user or
-team; otherwise GitHub treats every CODEOWNERS entry as invalid and
-"require code-owner reviews" can never be satisfied, permanently blocking
-every PR that touches a protected-core path.
+automatically just because the files exist. `.github/CODEOWNERS` already
+names a real GitHub user, `@OmPrakashSingh1704`, as owner, so its entries
+are valid; enabling branch protection with "require code-owner reviews" is
+the only remaining step to make that review actually required.
 
 **Plan requirement:** branch protection on a **private** repository needs a
 paid GitHub plan (Pro for personal accounts, Team or Enterprise for
@@ -153,8 +152,8 @@ issues read/write on this repo only. Both are
 [preconditions](SECURITY.md#preconditions-before-pointing-a-live-agent-at-a-repo)
 before a live agent is pointed at the repo.
 
-Once `@OWNER` is replaced, a repo admin with `gh` authenticated against
-`OmPrakashSingh1704/fleet-mcp` runs:
+CODEOWNERS already names the real owner, so a repo admin with `gh`
+authenticated against `OmPrakashSingh1704/fleet-mcp` can run:
 
 ```bash
 gh api repos/OmPrakashSingh1704/fleet-mcp/branches/main/protection \

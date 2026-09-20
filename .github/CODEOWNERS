@@ -1,6 +1,6 @@
-# Replace @OWNER with the GitHub user or team that must approve
-# protected-core changes. Until then GitHub will flag these entries as
-# invalid and code-owner review cannot be enforced.
+# Code owners for Fleet MCP's protected core. These entries only take
+# effect once branch protection with "Require review from Code Owners" is
+# enabled -- see CONTRIBUTING.md#enabling-branch-protection.
 
 # Protected core (see ARCHITECTURE.md#protected-core-enforcement-layers and
 # SECURITY.md#guarantees). Mirrors fleetmcp/common/manifest.py:
@@ -8,26 +8,31 @@
 # marked protected: true in fleet_manifest.yaml.
 
 # ALWAYS_PROTECTED_PATHS (exact files)
-/fleet_manifest.yaml             @OWNER
-/fleetmcp/common/manifest.py     @OWNER
-/fleetmcp/__init__.py            @OWNER
-/requirements.txt                @OWNER
-/requirements-dev.txt            @OWNER
-/docker-compose.yml              @OWNER
-/pyproject.toml                  @OWNER
-/.gitattributes                  @OWNER
-/.gitignore                      @OWNER
+/fleet_manifest.yaml             @OmPrakashSingh1704
+/fleetmcp/common/manifest.py     @OmPrakashSingh1704
+/fleetmcp/__init__.py            @OmPrakashSingh1704
+/requirements.txt                @OmPrakashSingh1704
+/requirements-dev.txt            @OmPrakashSingh1704
+/docker-compose.yml              @OmPrakashSingh1704
+/pyproject.toml                  @OmPrakashSingh1704
+/.gitattributes                  @OmPrakashSingh1704
+/.gitignore                      @OmPrakashSingh1704
 
 # ALWAYS_PROTECTED_PREFIXES (whole subtrees). /.github/ also covers CI and
 # this CODEOWNERS file -- nobody should be able to weaken required checks or
 # code-owner review without owner sign-off.
-/fleetmcp/common/                @OWNER
-/.github/                        @OWNER
+/fleetmcp/common/                @OmPrakashSingh1704
+/.github/                        @OmPrakashSingh1704
 
 # Services marked protected: true in fleet_manifest.yaml
-/fleetmcp/deploy_watcher/        @OWNER
-/fleetmcp/permission_manager/    @OWNER
-/fleetmcp/mcp_gateway/           @OWNER
+/fleetmcp/deploy_watcher/        @OmPrakashSingh1704
+/fleetmcp/permission_manager/    @OmPrakashSingh1704
+/fleetmcp/mcp_gateway/           @OmPrakashSingh1704
+
+# Self-Dev MCP's own guard code. Not protected in fleet_manifest.yaml --
+# Self-Dev MCP may propose changes to it -- but those changes weaken the
+# very checks that constrain it, so they need owner review.
+/fleetmcp/self_dev_mcp/          @OmPrakashSingh1704
 
 # Security policy.
-/SECURITY.md                     @OWNER
+/SECURITY.md                     @OmPrakashSingh1704

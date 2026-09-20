@@ -406,7 +406,7 @@ docker-compose.yml          local fleet: mcp-fleet network + all three services 
 | Deploy Watcher (blue/green, probation, rollback, known-good floor) | Built |
 | Docker Compose + per-service Dockerfiles | Built |
 | Self-Dev MCP HTTP transport (`--transport http`) | Built |
-| CI workflow + CODEOWNERS | Built (the CODEOWNERS owner is a placeholder — `@OWNER` — and branch protection must still be enabled by the repo admin; see [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection)) |
+| CI workflow + CODEOWNERS | Built (CODEOWNERS names a real owner, `@OmPrakashSingh1704`; branch protection must still be enabled by the repo admin for that review to be enforced, rather than advisory; see [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection)) |
 | MCP gateway | Planned |
 | Permission manager | Planned |
 | `model-adapters-mcp` | Planned |

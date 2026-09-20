@@ -96,8 +96,12 @@ minor versions).
   (`fleet_manifest.yaml`, `fleetmcp/common/manifest.py`,
   `fleetmcp/deploy_watcher/`, the planned `fleetmcp/permission_manager/`
   and `fleetmcp/mcp_gateway/` directories, `/.github/`, and `SECURITY.md`)
-  with a placeholder `@OWNER` — GitHub will flag these entries as invalid,
-  and code-owner review cannot be enforced, until `@OWNER` is replaced.
+  and now also `/fleetmcp/self_dev_mcp/` (Self-Dev MCP's own guard code is
+  not protected in `fleet_manifest.yaml`, so the agent may propose changes
+  to it, but such changes weaken the checks that constrain it). It names
+  the repo owner, `@OmPrakashSingh1704`; code-owner review still isn't
+  enforced until a repo admin enables branch protection (see
+  [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection)).
 - `.github/workflows/test.yml`: the CI workflow (job id `test`, so the
   required-check context is `test`), running on `pull_request` and `push`
   to `main` with least-privilege `contents: read` permissions and a

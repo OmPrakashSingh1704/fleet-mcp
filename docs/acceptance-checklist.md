@@ -39,10 +39,9 @@ the GitHub API, so the preconditions above are the real backstop.
    `start_issue`, `write_file`, `run_tests`, and `submit_pr` against
    that issue and confirm a real pull request appears on
    `selfdev/issue-N`.
-3. **Verify CI and the required review block the merge** (requires branch
-   protection enabled per
-   [CONTRIBUTING.md#enabling-branch-protection](../CONTRIBUTING.md#enabling-branch-protection)
-   and `@OWNER` replaced in `.github/CODEOWNERS`): confirm the PR cannot be
+3. **Verify CI and the required review block the merge** (requires
+   [branch protection enabled](../CONTRIBUTING.md#enabling-branch-protection)):
+   confirm the PR cannot be
    merged until CI passes and a human review is submitted.
    Also confirm the PR's author is the bot identity, not the owner.
 4. **Merge** the PR once CI is green and it's approved.

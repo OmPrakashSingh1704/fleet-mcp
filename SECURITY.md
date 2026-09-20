@@ -23,7 +23,8 @@ Do **not** connect a live agent to Self-Dev MCP for a repository until
 
 1. **Branch protection is enabled on `main`**: the required `test` status
    check, at least one required approving review, required code-owner
-   review (with a real owner in `.github/CODEOWNERS`, not `@OWNER`), and
+   review (`.github/CODEOWNERS` already names a real owner,
+   `@OmPrakashSingh1704`), and
    `enforce_admins`. See
    [CONTRIBUTING.md#enabling-branch-protection](CONTRIBUTING.md#enabling-branch-protection).
    Branch protection on a **private** repository requires a paid GitHub
@@ -38,7 +39,8 @@ Do **not** connect a live agent to Self-Dev MCP for a repository until
 
 For this repository (`OmPrakashSingh1704/fleet-mcp`, private, on GitHub
 Pro) the supported sequence is: the owner merges the foundation branch;
-then `@OWNER` in CODEOWNERS becomes `@OmPrakashSingh1704` and full branch
+CODEOWNERS already names `@OmPrakashSingh1704` as owner, so right after that
+merge full branch
 protection is applied (required `test` check, 1 approving review,
 code-owner review, dismiss stale reviews, `enforce_admins`, no force-push,
 no deletions); from then on self-dev runs as a separate bot identity so the
@@ -373,11 +375,12 @@ Before pointing Fleet MCP at a repository you care about:
       for the exact command.
 - [ ] **(Precondition)** Give Self-Dev MCP its own bot identity (a machine
       user or a GitHub App), never the owner's PAT.
-- [ ] Replace the `@OWNER` placeholder in `.github/CODEOWNERS` (it already
-      covers the protected core: every `ALWAYS_PROTECTED_PATHS` file, the
-      `fleetmcp/common/` and `.github/` subtrees, the deploy watcher,
-      permission manager and gateway directories, and `SECURITY.md`) with a
-      real human owner. Code-owner review cannot be enforced until you do.
+- [x] `.github/CODEOWNERS` names a real human owner, `@OmPrakashSingh1704`
+      (it covers the protected core: every `ALWAYS_PROTECTED_PATHS` file,
+      the `fleetmcp/common/` and `.github/` subtrees, the deploy watcher,
+      permission manager and gateway directories, `fleetmcp/self_dev_mcp/`,
+      and `SECURITY.md`). Code-owner review still cannot be enforced until
+      branch protection above is enabled.
 - [ ] Use fine-grained tokens on this repo only: `SELF_DEV_GITHUB_TOKEN` with
       contents, pull requests and issues read/write; `WATCHER_GITHUB_TOKEN`
       with contents read-only. Never an org-wide or admin token, and never
