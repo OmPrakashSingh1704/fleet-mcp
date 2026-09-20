@@ -70,13 +70,23 @@ project on PyPI/TestPyPI.
    (`__version__ = "X.Y.Z"`). This is the single source of truth for the
    package version — `[tool.hatch.version]` in `pyproject.toml` reads it,
    and `scripts/check_tag_version.py` checks the release tag against it.
+   **For the very first release, this is a no-op**: nothing has ever been
+   tagged or published (`git tag -l` is empty), and `__version__` already
+   reads `"0.1.0"` from the unreleased foundation work, so there's nothing
+   to change here the first time through — start straight from step 2 with
+   `X.Y.Z = 0.1.0`.
 
 2. **Move `[Unreleased]` to a dated version** in
    [`CHANGELOG.md`](CHANGELOG.md): rename the `## [Unreleased]` heading to
    `## [X.Y.Z] - YYYY-MM-DD`, add a fresh empty `## [Unreleased]` above it if
    there's ongoing work, and update the compare links at the bottom of the
-   file (`[Unreleased]: .../compare/vX.Y.Z...HEAD` and
-   `[X.Y.Z]: .../releases/tag/vX.Y.Z`).
+   file. **For the first release** (no prior tag exists yet), that means
+   `[Unreleased]: .../compare/vX.Y.Z...HEAD` and
+   `[X.Y.Z]: .../releases/tag/vX.Y.Z` (there's no earlier tag to compare
+   from). **For every release after the first**, the new version's own link
+   instead compares from the previous tag —
+   `[X.Y.Z]: .../compare/vPREVIOUS...vX.Y.Z` — while `[Unreleased]` keeps
+   the same `compare/vX.Y.Z...HEAD` form, just against the newest tag.
 
 3. **Open a PR with both changes and merge it** through normal review (see
    [CONTRIBUTING.md](CONTRIBUTING.md)). Do not tag before this merges — the

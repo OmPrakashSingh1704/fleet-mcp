@@ -335,12 +335,44 @@ def main(argv: list[str] | None = None) -> None:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     args = _parse_args(argv)
-    if args.transport == "http":
-        import uvicorn
 
-        uvicorn.run(build_http_app(), host=args.host, port=args.port)
-    else:
-        build_mcp_app().run()
+    # Validate configuration up front, with a friendly one-shot message
+    # instead of a raw traceback out of site-packages -- this is most
+    # people's first run after `pip install fleetmcp` / `uvx fleetmcp`.
+    # load_settings() is checked here, separately from build_mcp_app()
+    # (which calls it again -- a cheap, side-effect-free re-read of the
+    # same env vars), so a KeyError from something else entirely -- e.g. a
+    # malformed fleet_manifest.yaml missing a service's `path` key --
+    # can't be misreported as a missing environment variable.
+    try:
+        load_settings()
+    except KeyError as exc:
+        var = exc.args[0] if exc.args else exc
+        print(
+            f"fleetmcp-self-dev: missing required environment variable {var!r}.\n"
+            "See the Install section in README.md and .env.example for the "
+            "full list of required and optional variables.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+    try:
+        if args.transport == "http":
+            import uvicorn
+
+            uvicorn.run(build_http_app(), host=args.host, port=args.port)
+        else:
+            build_mcp_app().run()
+    except FileNotFoundError as exc:
+        path = exc.filename or manifest_path()
+        print(
+            f"fleetmcp-self-dev: fleet manifest not found at {path!r}.\n"
+            "Set FLEET_MANIFEST_PATH to point at your fleet_manifest.yaml, "
+            "or run from a directory that has one -- see the Install section "
+            "in README.md.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
