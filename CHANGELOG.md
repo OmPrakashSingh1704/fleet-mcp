@@ -9,7 +9,49 @@ minor versions).
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- Zero-config startup for Self-Dev MCP: `SELF_DEV_GITHUB_TOKEN` is now the
+  only required environment variable. `SELF_DEV_REPO_REMOTE`, when unset,
+  is auto-detected by running `git remote get-url origin` in the server's
+  working directory; `GITHUB_REPO_FULL_NAME`, when unset, is parsed as
+  `owner/repo` from that remote (`https://github.com/o/r(.git)`,
+  `git@github.com:o/r(.git)`, and `ssh://git@github.com/o/r.git` are all
+  recognized). An explicitly set environment variable always overrides
+  detection. New module `flotilla_mcp/self_dev_mcp/repo_detect.py`. If
+  neither an explicit `SELF_DEV_REPO_REMOTE` nor a detectable `origin`
+  remote is available, the server exits 1 with a friendly one-line message
+  instead of a traceback.
+- Self-Dev MCP now starts against a non-GitHub remote (or a local path):
+  `github_repo_full_name` is allowed to be `None`, and `GitHubClient` is
+  only constructed when it's set. The editing tools (`start_issue`,
+  `read_file`, `write_file`, `run_tests`) work normally; the GitHub-backed
+  tools (`list_assigned_issues`, `check_pr_status`, `submit_pr`, and the
+  exhaustion comment inside `write_file`) return `"ERROR: no GitHub
+  repository configured; set GITHUB_REPO_FULL_NAME to use GitHub features"`
+  instead of raising or half-working.
+- The fleet manifest is now optional. `manifest_path()` resolves
+  `FLEET_MANIFEST_PATH`, then `fleet_manifest.yaml` in the current
+  directory, then `fleet_manifest.yaml` at the git repo root
+  (`git rev-parse --show-toplevel`). If none exist, the server starts with
+  an empty manifest (`services: {}`) and logs one WARNING naming the paths
+  it checked -- only the built-in `ALWAYS_PROTECTED_PATHS` /
+  `ALWAYS_PROTECTED_PREFIXES` and the `.git`/absolute-path/`..`-escape
+  checks apply until a manifest exists. An *explicit* `FLEET_MANIFEST_PATH`
+  that doesn't exist is still a hard error, unchanged.
+
+### Fixed
+
+- First-run and manifest-not-found messages now name the program the user
+  actually invoked (`flotilla-mcp`, `flotilla-self-dev`, or `uvx
+  flotilla-mcp`) instead of always saying `flotilla-self-dev`, derived from
+  `sys.argv[0]` (stripping a Windows `.exe` suffix), falling back to
+  `flotilla-mcp`.
+- `.github/workflows/release.yml`'s `github-release` job is now idempotent:
+  if a release for the tag already exists (e.g. a re-run after a transient
+  failure downstream), it uploads the build artifacts to the existing
+  release with `--clobber` instead of failing on `gh release create
+  --verify-tag`.
 
 ## [0.1.0] - 2026-09-20
 
