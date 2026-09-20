@@ -220,7 +220,7 @@ backstop against a hostile agent is GitHub-side: branch protection
   to a tracked file.
 - **Policy-denial audit log.** Every `REFUSED` / `EXHAUSTED` decision in
   `write_file`, `read_file` and `run_tests` is logged at WARNING on the
-  `fleet_mcp.audit` logger (stderr) as
+  `flotilla_mcp.audit` logger (stderr) as
   `policy-denial tool=… issue=… path=<repr> reason=…`. File content is never
   logged.
 - **Known-good floor.** An image is recorded as known-good only after it

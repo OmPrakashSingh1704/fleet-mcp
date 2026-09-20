@@ -262,7 +262,7 @@ agent-written code executed by `run_tests` bypasses layers 1 and 2 entirely
    symlink/junction-resolved target relative to the resolved workspace
    root, and enforces workspace containment. `read_file` and `run_tests`
    get the same `.git` and containment checks (`run_tests` also refuses
-   option-like paths). Every refusal is audit-logged on `fleet_mcp.audit`.
+   option-like paths). Every refusal is audit-logged on `flotilla_mcp.audit`.
    The attempt cap gate (`AttemptTracker.try_record_attempt`) is atomic and
    is the final check before a write happens. Git invocations
    (`git_ops._run_git`) disable hooks and fsmonitor, and `push` uses an
