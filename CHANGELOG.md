@@ -9,6 +9,10 @@ minor versions).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.0] - 2026-09-20
+
 ### Added
 
 - `flotilla_mcp/common/manifest.py`: `FleetManifest`, the fleet manifest loader
@@ -247,4 +251,5 @@ See [SECURITY.md](SECURITY.md#known-limitations) and the
 manager, `model-adapters-mcp`, `credentials-manager`, and the Model Manager
 chat flow are not built yet.
 
-[Unreleased]: https://github.com/OmPrakashSingh1704/flotilla-mcp/commits/main
+[Unreleased]: https://github.com/OmPrakashSingh1704/flotilla-mcp/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/OmPrakashSingh1704/flotilla-mcp/releases/tag/v0.1.0
